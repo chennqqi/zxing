@@ -112,6 +112,7 @@ def main():
     results = parse_benchmark_output(output)
     analysis = analyze_results(results)
     save_results(results, analysis, output_dir)
+    
     print(f'分析完成，结果已保存到 {output_dir}')
 
 if __name__ == '__main__':

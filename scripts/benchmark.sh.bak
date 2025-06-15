@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 # 设置测试次数和输出目录
 BENCHMARK_COUNT=5
 OUTPUT_DIR="benchmark_results"
