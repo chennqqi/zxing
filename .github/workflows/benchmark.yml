@@ -1,0 +1,84 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 0'  # 每周日运行
+
+jobs:
+  benchmark:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        go-version: [1.19.x]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Install dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake
+        sudo apt-get install -y libzxing-dev
+        sudo apt-get install -y python3
+
+    - name: Install dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        vcpkg install zxing-cpp:x64-windows
+        python -m pip install --upgrade pip
+
+    - name: Install dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install cmake
+        brew install zxing-cpp
+        brew install python3
+
+    - name: Build
+      run: |
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          .\build.bat
+        else
+          chmod +x build.sh
+          ./build.sh
+        fi
+
+    - name: Run benchmarks
+      run: |
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          .\scripts\benchmark.bat
+        else
+          chmod +x scripts/benchmark.sh
+          ./scripts/benchmark.sh
+        fi
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results-${{ matrix.os }}
+        path: |
+          benchmark_results/
+          benchmark_results/*/benchmark_report.md
+        if-no-files-found: error
+
+    - name: Compare with previous results
+      if: github.event_name == 'pull_request'
+      run: |
+        # 下载上一次的基准测试结果
+        if [ -f "benchmark_results/previous/benchmark_report.md" ]; then
+          echo "Comparing with previous results..."
+          diff benchmark_results/*/benchmark_report.md benchmark_results/previous/benchmark_report.md || true
+        else
+          echo "No previous results found for comparison"
+        fi 
