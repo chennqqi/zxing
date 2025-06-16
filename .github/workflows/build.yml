@@ -25,28 +25,29 @@ jobs:
 
     - name: Install dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
-      timeout-minutes: 5
+      timeout-minutes: 10
       run: |
+        sudo apt-get clean
         sudo apt-get update
-        sudo apt-get install -y build-essential
+        sudo apt-get install -y --no-install-recommends build-essential
 
     - name: Install CMake (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
-      timeout-minutes: 5
+      timeout-minutes: 10
       run: |
-        sudo apt-get install -y cmake
+        sudo apt-get install -y --no-install-recommends cmake
 
     - name: Install ZXing (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
-      timeout-minutes: 5
+      timeout-minutes: 10
       run: |
-        sudo apt-get install -y libzxing-dev
+        sudo apt-get install -y --no-install-recommends libzxing-dev
 
     - name: Install Python3 (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
-      timeout-minutes: 5
+      timeout-minutes: 10
       run: |
-        sudo apt-get install -y python3
+        sudo apt-get install -y --no-install-recommends python3
 
     - name: Install dependencies (Windows)
       if: matrix.os == 'windows-latest'
