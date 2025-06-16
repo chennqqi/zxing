@@ -41,11 +41,10 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       timeout-minutes: 15
       run: |
-        git clone https://github.com/zxing-cpp/zxing-cpp.git
-        cd zxing-cpp
+        git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
         mkdir build && cd build
-        cmake ..
-        make -j$(nproc)
+        cmake -S .. -B . -DCMAKE_BUILD_TYPE=Release
+        cmake --build . -j$(nproc) --config Release
         sudo make install
         sudo ldconfig
 
