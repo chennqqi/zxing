@@ -124,6 +124,7 @@ jobs:
         path: |
           build/
           dist/
+          scripts/
         if-no-files-found: error
 
   package-deb:
@@ -138,12 +139,17 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: build-ubuntu-latest
-        path: build/
+        path: .
     
     - name: Install packaging tools
       run: |
         sudo apt-get update
         sudo apt-get install -y devscripts debhelper dh-make
+    
+    - name: Setup DEB build environment
+      run: |
+        mkdir -p debian
+        cp -r build/* debian/
     
     - name: Create DEB package
       run: |
@@ -169,12 +175,18 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: build-rocky-9
-        path: build/
+        path: .
     
     - name: Install packaging tools
       run: |
         sudo dnf update -y
         sudo dnf install -y rpm-build rpmdevtools
+    
+    - name: Setup RPM build environment
+      run: |
+        rpmdev-setuptree
+        cp -r build/* $HOME/rpmbuild/SOURCES/
+        cp -r scripts/* $HOME/rpmbuild/SOURCES/
     
     - name: Create RPM package
       run: |
@@ -200,6 +212,8 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: dist/
+        pattern: '*.deb,*.rpm'
+        merge-multiple: true
     
     - name: Create Release
       uses: softprops/action-gh-release@v1
