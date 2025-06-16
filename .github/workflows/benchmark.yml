@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest, rocky-9]
         go-version: [1.19.x]
 
     steps:
@@ -26,6 +26,7 @@ jobs:
 
     - name: Install dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
+      timeout-minutes: 15
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential cmake
@@ -34,18 +35,30 @@ jobs:
 
     - name: Install dependencies (Windows)
       if: matrix.os == 'windows-latest'
+      timeout-minutes: 15
       run: |
         vcpkg install zxing-cpp:x64-windows
         python -m pip install --upgrade pip
 
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
+      timeout-minutes: 15
       run: |
         brew install cmake
         brew install zxing-cpp
         brew install python3
 
+    - name: Install dependencies (Rocky Linux)
+      if: matrix.os == 'rocky-9'
+      timeout-minutes: 15
+      run: |
+        sudo dnf update -y
+        sudo dnf install -y gcc-c++ make cmake
+        sudo dnf install -y zxing-cpp-devel
+        sudo dnf install -y python3
+
     - name: Build
+      timeout-minutes: 15
       run: |
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           .\build.bat
@@ -55,6 +68,7 @@ jobs:
         fi
 
     - name: Run benchmarks
+      timeout-minutes: 15
       run: |
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           .\scripts\benchmark.bat
@@ -64,6 +78,7 @@ jobs:
         fi
 
     - name: Upload benchmark results
+      timeout-minutes: 15
       uses: actions/upload-artifact@v4
       with:
         name: benchmark-results-${{ matrix.os }}
@@ -74,6 +89,7 @@ jobs:
 
     - name: Compare with previous results
       if: github.event_name == 'pull_request'
+      timeout-minutes: 15
       run: |
         # 下载上一次的基准测试结果
         if [ -f "benchmark_results/previous/benchmark_report.md" ]; then
