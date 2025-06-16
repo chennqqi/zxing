@@ -72,7 +72,9 @@ jobs:
       if: matrix.os == 'rocky-9'
       timeout-minutes: 15
       run: |
+        cd /tmp
         git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
+        cd zxing-cpp
         mkdir build && cd build
         cmake -S .. -B . -DCMAKE_BUILD_TYPE=Release
         cmake --build . -j$(nproc) --config Release
@@ -157,7 +159,7 @@ jobs:
 
   package-rpm:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: rocky-9
     if: startsWith(github.ref, 'refs/tags/')
     
     steps:
@@ -166,13 +168,13 @@ jobs:
     - name: Download build artifacts
       uses: actions/download-artifact@v4
       with:
-        name: build-ubuntu-latest
+        name: build-rocky-9
         path: build/
     
     - name: Install packaging tools
       run: |
-        sudo apt-get update
-        sudo apt-get install -y rpm rpm-build
+        sudo dnf update -y
+        sudo dnf install -y rpm-build rpmdevtools
     
     - name: Create RPM package
       run: |
