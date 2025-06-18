@@ -30,7 +30,17 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential cmake
-        sudo apt-get install -y libzxing-dev
+        # 尝试安装系统包
+        sudo apt-get install -y libzxing-dev || true
+        # 如果系统包不存在，从源码编译
+        if ! pkg-config --exists zxing-cpp && ! pkg-config --exists zxing; then
+          git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
+          mkdir build && cd build
+          cmake -S .. -B . -DCMAKE_BUILD_TYPE=Release
+          cmake --build . -j$(nproc) --config Release
+          sudo make install
+          sudo ldconfig
+        fi
         sudo apt-get install -y python3
 
     - name: Install dependencies (Windows)
@@ -52,9 +62,22 @@ jobs:
       if: matrix.os == 'rocky-9'
       timeout-minutes: 15
       run: |
+        # 安装 EPEL 源
+        sudo dnf install -y epel-release
         sudo dnf update -y
         sudo dnf install -y gcc-c++ make cmake
-        sudo dnf install -y zxing-cpp-devel
+        # 尝试安装系统包
+        sudo dnf install -y zxing-cpp-devel || true
+        # 如果系统包不存在，从源码编译
+        if ! pkg-config --exists zxing-cpp && ! pkg-config --exists zxing; then
+          git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
+          cd zxing-cpp
+          mkdir build && cd build
+          cmake -S .. -B . -DCMAKE_BUILD_TYPE=Release
+          cmake --build . -j$(nproc) --config Release
+          sudo make install
+          sudo ldconfig
+        fi
         sudo dnf install -y python3
 
     - name: Build
