@@ -5,6 +5,12 @@ project(zxing)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Windows 下设置 UTF-8 编码
+if(WIN32)
+    add_compile_options(/utf-8)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+endif()
+
 # 尝试多种方式查找 ZXing 库
 set(ZXING_FOUND FALSE)
 
@@ -15,8 +21,8 @@ if(ZXing_FOUND)
     message(STATUS "ZXing found via find_package")
 endif()
 
-# 方法2: 使用 pkg-config
-if(NOT ZXING_FOUND)
+# 方法2: 使用 pkg-config (仅在非 Windows 系统下)
+if(NOT ZXING_FOUND AND NOT WIN32)
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)
         # 尝试不同的包名
@@ -39,6 +45,8 @@ if(NOT ZXING_FOUND)
         "/usr/local"
         "/opt"
         "/opt/local"
+        "C:/Program Files"
+        "C:/Program Files (x86)"
     )
     
     # 查找头文件
@@ -74,13 +82,29 @@ endif()
 if(NOT ZXING_FOUND)
     message(STATUS "ZXing not found in system, downloading and building from source...")
     include(FetchContent)
+    
+    # 设置 FetchContent 选项
+    set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+    set(FETCHCONTENT_QUIET OFF)
+    
     FetchContent_Declare(
         zxing-cpp
         GIT_REPOSITORY https://github.com/zxing-cpp/zxing-cpp.git
         GIT_TAG v2.2.0
         GIT_SHALLOW TRUE
     )
+    
+    # 设置 ZXing 构建选项
+    set(BUILD_SHARED_LIB ON CACHE BOOL "Build shared library")
+    set(BUILD_EXAMPLES OFF CACHE BOOL "Build examples")
+    set(BUILD_TESTS OFF CACHE BOOL "Build tests")
+    
     FetchContent_MakeAvailable(zxing-cpp)
+    
+    # 如果 FetchContent 失败，提供错误信息
+    if(NOT zxing-cpp_POPULATED)
+        message(FATAL_ERROR "Failed to download and configure ZXing library. Please check your internet connection or try installing ZXing manually.")
+    endif()
 else()
     message(STATUS "Using system-installed ZXing library")
 endif()

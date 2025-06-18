@@ -3,6 +3,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <cstdarg>
+#include <cstring>
 
 using namespace ZXing;
 
