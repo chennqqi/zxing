@@ -19,6 +19,16 @@ find_package(ZXing QUIET)
 if(ZXing_FOUND)
     set(ZXING_FOUND TRUE)
     message(STATUS "ZXing found via find_package")
+    
+    # 确保 ZXing::ZXing 目标存在
+    if(NOT TARGET ZXing::ZXing)
+        # 如果 find_package 没有创建目标，手动创建
+        add_library(ZXing::ZXing UNKNOWN IMPORTED)
+        set_target_properties(ZXing::ZXing PROPERTIES
+            IMPORTED_LOCATION "${ZXing_LIBRARIES}"
+            INTERFACE_INCLUDE_DIRECTORIES "${ZXing_INCLUDE_DIRS}"
+        )
+    endif()
 endif()
 
 # 方法2: 使用 pkg-config (仅在非 Windows 系统下)
@@ -31,6 +41,15 @@ if(NOT ZXING_FOUND AND NOT WIN32)
             if(PC_ZXING_FOUND)
                 set(ZXING_FOUND TRUE)
                 message(STATUS "ZXing found via pkg-config: ${pkg_name}")
+                
+                # 创建导入目标
+                add_library(ZXing::ZXing UNKNOWN IMPORTED)
+                set_target_properties(ZXing::ZXing PROPERTIES
+                    IMPORTED_LOCATION "${PC_ZXING_LIBRARIES}"
+                    INTERFACE_INCLUDE_DIRECTORIES "${PC_ZXING_INCLUDE_DIRS}"
+                    INTERFACE_LINK_LIBRARIES "${PC_ZXING_LIBRARIES}"
+                    INTERFACE_COMPILE_OPTIONS "${PC_ZXING_CFLAGS_OTHER}"
+                )
                 break()
             endif()
         endforeach()
