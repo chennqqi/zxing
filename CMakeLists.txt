@@ -16,18 +16,32 @@ set(ZXING_FOUND FALSE)
 
 # 方法1: 使用 find_package
 find_package(ZXing QUIET)
+message(STATUS "ZXing_FOUND: ${ZXing_FOUND}")
+message(STATUS "ZXing_LIBRARIES: ${ZXing_LIBRARIES}")
+message(STATUS "ZXing_INCLUDE_DIRS: ${ZXing_INCLUDE_DIRS}")
+message(STATUS "ZXing_VERSION: ${ZXing_VERSION}")
+
 if(ZXing_FOUND)
-    set(ZXING_FOUND TRUE)
-    message(STATUS "ZXing found via find_package")
-    
-    # 确保 ZXing::ZXing 目标存在
-    if(NOT TARGET ZXing::ZXing)
-        # 如果 find_package 没有创建目标，手动创建
-        add_library(ZXing::ZXing UNKNOWN IMPORTED)
-        set_target_properties(ZXing::ZXing PROPERTIES
-            IMPORTED_LOCATION "${ZXing_LIBRARIES}"
-            INTERFACE_INCLUDE_DIRECTORIES "${ZXing_INCLUDE_DIRS}"
-        )
+    # 检查必要的变量是否设置
+    if(ZXing_LIBRARIES AND ZXing_INCLUDE_DIRS)
+        set(ZXING_FOUND TRUE)
+        message(STATUS "ZXing found via find_package")
+        
+        # 确保 ZXing::ZXing 目标存在
+        if(NOT TARGET ZXing::ZXing)
+            # 如果 find_package 没有创建目标，手动创建
+            add_library(ZXing::ZXing UNKNOWN IMPORTED)
+            set_target_properties(ZXing::ZXing PROPERTIES
+                IMPORTED_LOCATION "${ZXing_LIBRARIES}"
+                INTERFACE_INCLUDE_DIRECTORIES "${ZXing_INCLUDE_DIRS}"
+            )
+            message(STATUS "Created ZXing::ZXing target manually")
+        else()
+            message(STATUS "ZXing::ZXing target already exists")
+        endif()
+    else()
+        message(WARNING "ZXing found via find_package but ZXing_LIBRARIES or ZXing_INCLUDE_DIRS not set, falling back to other methods")
+        set(ZXING_FOUND FALSE)
     endif()
 endif()
 
