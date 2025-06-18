@@ -1,9 +1,9 @@
-package zxing
+package main
 
-// #cgo CXXFLAGS: -I${SRCDIR}/include
-// #cgo LDFLAGS: -L${SRCDIR}/lib -lzxing
+// #cgo CFLAGS: -I.
+// #cgo LDFLAGS: -L. -lzxing
 // #include <stdlib.h>
-// #include "zxing.h"
+// #include "include/zxing.h"
 import "C"
 import (
 	"errors"
@@ -189,4 +189,9 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// main 函数，用于满足 c-shared 构建要求
+func main() {
+	// 空的 main 函数，仅用于满足 buildmode=c-shared 的要求
 }

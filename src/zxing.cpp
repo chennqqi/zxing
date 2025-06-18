@@ -1,5 +1,5 @@
 #include "zxing.h"
-#include <ZXing.h>
+#include <ZXing/ReadBarcode.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -42,22 +42,22 @@ void free_options(DecodeOptions* options) {
 }
 
 // 转换 ZXing 格式到 C 格式
-static BarcodeFormat convert_format(BarcodeFormat format) {
+static ::BarcodeFormat convert_format(ZXing::BarcodeFormat format) {
     switch (format) {
-        case BarcodeFormat::QR_CODE: return FORMAT_QR_CODE;
-        case BarcodeFormat::AZTEC: return FORMAT_AZTEC;
-        case BarcodeFormat::CODABAR: return FORMAT_CODABAR;
-        case BarcodeFormat::CODE_39: return FORMAT_CODE_39;
-        case BarcodeFormat::CODE_93: return FORMAT_CODE_93;
-        case BarcodeFormat::CODE_128: return FORMAT_CODE_128;
-        case BarcodeFormat::DATA_MATRIX: return FORMAT_DATA_MATRIX;
-        case BarcodeFormat::EAN_8: return FORMAT_EAN_8;
-        case BarcodeFormat::EAN_13: return FORMAT_EAN_13;
-        case BarcodeFormat::ITF: return FORMAT_ITF;
-        case BarcodeFormat::MAXICODE: return FORMAT_MAXICODE;
-        case BarcodeFormat::PDF_417: return FORMAT_PDF_417;
-        case BarcodeFormat::UPC_A: return FORMAT_UPC_A;
-        case BarcodeFormat::UPC_E: return FORMAT_UPC_E;
+        case ZXing::BarcodeFormat::QR_CODE: return FORMAT_QR_CODE;
+        case ZXing::BarcodeFormat::AZTEC: return FORMAT_AZTEC;
+        case ZXing::BarcodeFormat::CODABAR: return FORMAT_CODABAR;
+        case ZXing::BarcodeFormat::CODE_39: return FORMAT_CODE_39;
+        case ZXing::BarcodeFormat::CODE_93: return FORMAT_CODE_93;
+        case ZXing::BarcodeFormat::CODE_128: return FORMAT_CODE_128;
+        case ZXing::BarcodeFormat::DATA_MATRIX: return FORMAT_DATA_MATRIX;
+        case ZXing::BarcodeFormat::EAN_8: return FORMAT_EAN_8;
+        case ZXing::BarcodeFormat::EAN_13: return FORMAT_EAN_13;
+        case ZXing::BarcodeFormat::ITF: return FORMAT_ITF;
+        case ZXing::BarcodeFormat::MAXICODE: return FORMAT_MAXICODE;
+        case ZXing::BarcodeFormat::PDF_417: return FORMAT_PDF_417;
+        case ZXing::BarcodeFormat::UPC_A: return FORMAT_UPC_A;
+        case ZXing::BarcodeFormat::UPC_E: return FORMAT_UPC_E;
         default: return FORMAT_NONE;
     }
 }
