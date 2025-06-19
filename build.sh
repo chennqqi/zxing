@@ -96,9 +96,9 @@ cd ..
 
 echo "Building Go library..."
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    go build -o bin/libzxing.dylib -buildmode=c-shared zxing.go
+    go build -o bin/libzxinggo.dylib -buildmode=c-shared cmd/cshared/main.go
 else
-    go build -o bin/libzxing.so -buildmode=c-shared zxing.go
+    go build -o bin/libzxinggo.so -buildmode=c-shared cmd/cshared/main.go
 fi
 if [ $? -ne 0 ]; then
     echo "Error: Go build failed"

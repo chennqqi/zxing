@@ -5,25 +5,6 @@ import (
 	"testing"
 )
 
-const (
-	FormatNone       = 0
-	FormatQRCode     = 1
-	FormatAztec      = 2
-	FormatCodabar    = 4
-	FormatCode39     = 8
-	FormatCode93     = 16
-	FormatCode128    = 32
-	FormatDataMatrix = 64
-	FormatEAN8       = 128
-	FormatEAN13      = 256
-	FormatITF        = 512
-	FormatMaxiCode   = 1024
-	FormatPDF417     = 2048
-	FormatUPCA       = 4096
-	FormatUPCE       = 8192
-	FormatAll        = 0xFFFF
-)
-
 // BenchmarkDecode 测试单个条码解码性能
 // 使用默认选项解码单个二维码
 func BenchmarkDecode(b *testing.B) {

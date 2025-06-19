@@ -1,7 +1,7 @@
-package main
+package zxing
 
-// #cgo CFLAGS: -I.
-// #cgo LDFLAGS: -L. -lzxing
+// #cgo CXXFLAGS: -std=c++17 -I. -I./include -I./zxing-cpp
+// #cgo LDFLAGS: -L./lib -lzxingwrapper -lstdc++
 // #include <stdlib.h>
 // #include "include/zxing.h"
 import "C"
@@ -189,9 +189,4 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
-}
-
-// main 函数，用于满足 c-shared 构建要求
-func main() {
-	// 空的 main 函数，仅用于满足 buildmode=c-shared 的要求
 }

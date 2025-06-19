@@ -31,3 +31,15 @@ go.work.sum
 # .idea/
 # .vscode/
 /build
+
+images
+tests
+compare_report.txt
+extract_our_success.py
+test
+*.bak
+lib
+tests.zip
+qrcode_image.zip
+test_report.txt
+zxing-cpp

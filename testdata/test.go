@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/threatbook/zxing"
+	"github.com/chennqqi/zxing"
 )
 
 // 生成测试用的二维码图片
