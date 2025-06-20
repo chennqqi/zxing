@@ -100,24 +100,38 @@ jobs:
           ./scripts/benchmark.sh
         fi
 
-    - name: Upload benchmark results
-      timeout-minutes: 15
+    - name: Find benchmark report
+      id: find_report
+      run: |
+        REPORT_PATH=$(find benchmark_results -name benchmark_report.md)
+        echo "path=$REPORT_PATH" >> $GITHUB_OUTPUT
+
+    - name: Upload benchmark report
       uses: actions/upload-artifact@v4
       with:
-        name: benchmark-results-${{ matrix.os }}
-        path: |
-          benchmark_results/
-          benchmark_results/*/benchmark_report.md
+        name: benchmark-report-${{ matrix.os }}
+        path: ${{ steps.find_report.outputs.path }}
         if-no-files-found: error
+
+    - name: Download previous benchmark report
+      if: github.event_name == 'pull_request'
+      uses: dawidd6/action-download-artifact@v3
+      with:
+        workflow: benchmark.yml
+        branch: main
+        name: benchmark-report-${{ matrix.os }}
+        path: benchmark_results/previous
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        if_no_artifact_found: 'ignore'
 
     - name: Compare with previous results
       if: github.event_name == 'pull_request'
-      timeout-minutes: 15
       run: |
-        # 下载上一次的基准测试结果
         if [ -f "benchmark_results/previous/benchmark_report.md" ]; then
           echo "Comparing with previous results..."
-          diff benchmark_results/*/benchmark_report.md benchmark_results/previous/benchmark_report.md || true
+          CURRENT_REPORT=$(find benchmark_results -name benchmark_report.md -not -path "*/previous/*")
+          echo "Current report: $CURRENT_REPORT"
+          diff "${CURRENT_REPORT}" "benchmark_results/previous/benchmark_report.md" || true
         else
           echo "No previous results found for comparison"
         fi 

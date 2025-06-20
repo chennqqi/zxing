@@ -53,7 +53,7 @@ cd ..
 
 :: 构建 Go 库
 echo Building Go library...
-go build -o bin/zxing.dll -buildmode=c-shared
+go build -o bin/zxing.dll -buildmode=c-shared zxing.go
 
 if %ERRORLEVEL% neq 0 (
     echo Error: Go build failed
