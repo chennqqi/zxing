@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
-project(zxing)
+project(zxing-wasm)
 
+# 设置Emscripten工具链
+set(CMAKE_TOOLCHAIN_FILE $ENV{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake)
+
+# 设置C++标准
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -9,11 +13,24 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+# Emscripten特定设置
+set(EMSCRIPTEN_LINK_FLAGS
+    -s WASM=1
+    -s EXPORTED_FUNCTIONS='["_malloc","_free","_decode_barcode","_decode_barcodes","_free_result","_free_results","_get_last_error"]'
+    -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]'
+    -s ALLOW_MEMORY_GROWTH=1
+    -s MODULARIZE=1
+    -s EXPORT_NAME=ZXingWASM
+    -s USE_ES6_IMPORT_META=0
+    -s ENVIRONMENT=web,node
+    -O3
+)
+
 # 添加ZXingCPP子目录
 add_subdirectory(zxing-cpp)
 
-# 创建wrapper库
-add_library(zxingwrapper SHARED src/zxing.cpp)
+# 创建WASM wrapper库
+add_executable(zxingwrapper src/zxing.cpp)
 
 # 设置包含目录
 target_include_directories(zxingwrapper
@@ -36,12 +53,17 @@ target_link_libraries(zxingwrapper
         ZXing
 )
 
+# 设置Emscripten链接标志
+set_target_properties(zxingwrapper PROPERTIES
+    LINK_FLAGS "${EMSCRIPTEN_LINK_FLAGS}"
+    SUFFIX ".js"
+)
+
 # 安装规则
 install(TARGETS zxingwrapper
-    LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
 
 install(FILES include/zxing.h
     DESTINATION include
-) 
+)

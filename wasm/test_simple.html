@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>ZXing WASM 测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        button { padding: 10px 20px; margin: 5px; }
+        #output { background: #f5f5f5; padding: 10px; margin: 10px 0; }
+        canvas { border: 1px solid #ccc; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ZXing WASM 测试页面</h1>
+        
+        <div class="section">
+            <h2>模块状态</h2>
+            <div id="status">正在加载 WASM 模块...</div>
+        </div>
+        
+        <div class="section">
+            <h2>编码测试</h2>
+            <input type="text" id="textInput" value="Hello, ZXing WASM!" placeholder="输入要编码的文本">
+            <button onclick="encodeText()">编码为二维码</button>
+            <canvas id="qrCanvas" width="256" height="256"></canvas>
+        </div>
+        
+        <div class="section">
+            <h2>解码测试</h2>
+            <button onclick="decodeCanvas()">解码画布内容</button>
+        </div>
+        
+        <div class="section">
+            <h2>输出日志</h2>
+            <div id="output"></div>
+        </div>
+    </div>
+
+    <script>
+        let wasmModule = null;
+        
+        function log(message) {
+            const output = document.getElementById('output');
+            output.innerHTML += new Date().toLocaleTimeString() + ': ' + message + '<br>';
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        // 模拟 WASM 模块加载（因为我们还没有真实的 zxing.js）
+        function initializeWASM() {
+            // 这里应该加载真实的 WASM 模块
+            // 现在使用模拟实现
+            wasmModule = {
+                ccall: function(funcName, returnType, argTypes, args) {
+                    log(`调用 WASM 函数: ${funcName}`);
+                    
+                    if (funcName === 'encode_text') {
+                        // 模拟编码功能
+                        return generateMockQRCode(args[0], args[1], args[2]);
+                    } else if (funcName === 'decode_image') {
+                        // 模拟解码功能
+                        return "模拟解码结果: " + args[0];
+                    }
+                    
+                    return null;
+                }
+            };
+            
+            document.getElementById('status').innerHTML = 
+                '<span style="color: green;">✓ WASM 模块已加载（模拟模式）</span>';
+            log('WASM 模块初始化完成（模拟模式）');
+        }
+        
+        function generateMockQRCode(text, width, height) {
+            const canvas = document.getElementById('qrCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // 清空画布
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, width, height);
+            
+            // 生成简单的测试图案
+            ctx.fillStyle = 'black';
+            const blockSize = 8;
+            
+            for (let y = 0; y < height; y += blockSize) {
+                for (let x = 0; x < width; x += blockSize) {
+                    // 基于文本内容和位置生成伪随机图案
+                    const hash = (text.charCodeAt(0) + x + y) % 3;
+                    if (hash === 0) {
+                        ctx.fillRect(x, y, blockSize, blockSize);
+                    }
+                }
+            }
+            
+            // 添加定位点
+            drawFinderPattern(ctx, 0, 0, blockSize);
+            drawFinderPattern(ctx, width - 7 * blockSize, 0, blockSize);
+            drawFinderPattern(ctx, 0, height - 7 * blockSize, blockSize);
+            
+            return canvas.toDataURL();
+        }
+        
+        function drawFinderPattern(ctx, x, y, size) {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(x, y, 7 * size, 7 * size);
+            ctx.fillStyle = 'white';
+            ctx.fillRect(x + size, y + size, 5 * size, 5 * size);
+            ctx.fillStyle = 'black';
+            ctx.fillRect(x + 2 * size, y + 2 * size, 3 * size, 3 * size);
+        }
+        
+        function encodeText() {
+            if (!wasmModule) {
+                log('错误: WASM 模块未加载');
+                return;
+            }
+            
+            const text = document.getElementById('textInput').value;
+            if (!text) {
+                log('错误: 请输入要编码的文本');
+                return;
+            }
+            
+            log(`开始编码文本: "${text}"`);
+            
+            try {
+                const result = wasmModule.ccall('encode_text', 'string', 
+                    ['string', 'number', 'number'], [text, 256, 256]);
+                
+                log('编码成功！二维码已生成到画布');
+            } catch (error) {
+                log('编码失败: ' + error.message);
+            }
+        }
+        
+        function decodeCanvas() {
+            if (!wasmModule) {
+                log('错误: WASM 模块未加载');
+                return;
+            }
+            
+            const canvas = document.getElementById('qrCanvas');
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            
+            log('开始解码画布内容...');
+            
+            try {
+                const result = wasmModule.ccall('decode_image', 'string',
+                    ['array', 'number', 'number'], [imageData.data, canvas.width, canvas.height]);
+                
+                log('解码结果: ' + result);
+            } catch (error) {
+                log('解码失败: ' + error.message);
+            }
+        }
+        
+        // 页面加载完成后初始化
+        window.onload = function() {
+            log('页面加载完成，开始初始化...');
+            initializeWASM();
+        };
+    </script>
+</body>
+</html>

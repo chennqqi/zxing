@@ -1,6 +1,6 @@
 #include "zxing.h"
 #include "zxing_internal.h"
-#include <ZXing/ReadBarcode.h>
+#include "ReadBarcode.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -76,6 +76,12 @@ static ::BarcodeFormat convert_format(ZXing::BarcodeFormat format) {
         case ZXing::BarcodeFormat::PDF417: return FORMAT_PDF_417;
         case ZXing::BarcodeFormat::UPCA: return FORMAT_UPC_A;
         case ZXing::BarcodeFormat::UPCE: return FORMAT_UPC_E;
+        case ZXing::BarcodeFormat::DataBar: return FORMAT_CODABAR; // 使用Codabar作为替代
+        case ZXing::BarcodeFormat::DataBarExpanded: return FORMAT_CODABAR; // 使用Codabar作为替代
+        case ZXing::BarcodeFormat::DataBarLimited: return FORMAT_CODABAR; // 使用Codabar作为替代
+        case ZXing::BarcodeFormat::MicroQRCode: return FORMAT_QR_CODE; // 使用QRCode作为替代
+        case ZXing::BarcodeFormat::RMQRCode: return FORMAT_QR_CODE; // 使用QRCode作为替代
+        case ZXing::BarcodeFormat::DXFilmEdge: return FORMAT_CODE_128; // 使用Code128作为替代
         default: return FORMAT_NONE;
     }
 }
@@ -153,10 +159,10 @@ DecodeResult* decode_barcode(const char* image_path, const DecodeOptions* option
 
         // 设置解码选项
         ReaderOptions hints;
-        hints.setTryHarder(options->try_harder);
-        hints.setTryRotate(options->try_rotate);
-        hints.setTryInvert(options->try_invert);
-        hints.setTryDownscale(options->try_downscale);
+        hints.setTryHarder(options->try_harder != 0);
+        hints.setTryRotate(options->try_rotate != 0);
+        hints.setTryInvert(options->try_invert != 0);
+        hints.setTryDownscale(options->try_downscale != 0);
 
         // 解码
         auto result = ReadBarcode(image, hints);
@@ -204,10 +210,10 @@ DecodeResult** decode_barcodes(const char* image_path, const DecodeOptions* opti
 
         // 设置解码选项
         ReaderOptions hints;
-        hints.setTryHarder(options->try_harder);
-        hints.setTryRotate(options->try_rotate);
-        hints.setTryInvert(options->try_invert);
-        hints.setTryDownscale(options->try_downscale);
+        hints.setTryHarder(options->try_harder != 0);
+        hints.setTryRotate(options->try_rotate != 0);
+        hints.setTryInvert(options->try_invert != 0);
+        hints.setTryDownscale(options->try_downscale != 0);
 
         // 解码
         auto results = ReadBarcodes(image, hints);

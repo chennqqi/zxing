@@ -1,7 +1,7 @@
 package zxing
 
-// #cgo CXXFLAGS: -std=c++17 -I. -I./include -I./zxing-cpp
-// #cgo LDFLAGS: -L./lib -lzxingwrapper -lstdc++
+// #cgo CXXFLAGS: -std=c++17 -I. -I./include -I./zxing-cpp/core/src
+// #cgo LDFLAGS: -L./lib -lzxingwrapper -lZXing -lstdc++
 // #include <stdlib.h>
 // #include "include/zxing.h"
 import "C"

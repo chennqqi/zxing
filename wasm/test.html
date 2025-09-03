@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZXing WASM Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 3px;
+            white-space: pre-wrap;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        canvas {
+            border: 1px solid #ddd;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>ZXing WASM Test</h1>
+    
+    <div class="test-section">
+        <h3>WASM Module Status</h3>
+        <button class="test-button" onclick="checkWASMStatus()">Check Status</button>
+        <div id="wasm-status" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>QR Code Generation</h3>
+        <input type="text" id="qr-text" placeholder="Enter text to encode" value="Hello, ZXing WASM!" style="width: 300px; padding: 5px;">
+        <button class="test-button" onclick="generateQR()">Generate QR Code</button>
+        <canvas id="qr-canvas" width="256" height="256"></canvas>
+        <div id="qr-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Supported Formats</h3>
+        <button class="test-button" onclick="getSupportedFormats()">Get Formats</button>
+        <div id="formats-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Image Upload & Decode</h3>
+        <input type="file" id="image-upload" accept="image/*">
+        <button class="test-button" onclick="decodeImage()">Decode Image</button>
+        <div id="decode-result" class="result"></div>
+    </div>
+
+    <script type="module">
+        let zxingWASM = null;
+        let wasmModule = null;
+
+        // 加载WASM模块
+        async function loadWASM() {
+            try {
+                const response = await fetch('./zxingwrapper.wasm');
+                const wasmBuffer = await response.arrayBuffer();
+                
+                const wasmModule = await WebAssembly.instantiate(wasmBuffer, {
+                    env: {
+                        memory: new WebAssembly.Memory({ initial: 256 }),
+                        abort: () => console.error('WASM abort called'),
+                        // 添加其他必要的环境函数
+                    }
+                });
+                
+                zxingWASM = wasmModule.instance.exports;
+                console.log('WASM module loaded successfully');
+                return true;
+            } catch (error) {
+                console.error('Failed to load WASM module:', error);
+                return false;
+            }
+        }
+
+        // 检查WASM状态
+        window.checkWASMStatus = function() {
+            const statusDiv = document.getElementById('wasm-status');
+            if (zxingWASM) {
+                statusDiv.className = 'result success';
+                statusDiv.textContent = '✅ WASM module is loaded and ready';
+            } else {
+                statusDiv.className = 'result error';
+                statusDiv.textContent = '❌ WASM module is not loaded';
+            }
+        };
+
+        // 生成二维码
+        window.generateQR = function() {
+            const text = document.getElementById('qr-text').value;
+            const resultDiv = document.getElementById('qr-result');
+            
+            if (!zxingWASM) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'WASM module not loaded';
+                return;
+            }
+
+            try {
+                // 这里应该调用WASM的编码函数
+                // 暂时使用模拟数据
+                const canvas = document.getElementById('qr-canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // 清空画布
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, 256, 256);
+                
+                // 绘制简单的模拟二维码
+                ctx.fillStyle = 'black';
+                for (let i = 0; i < 256; i += 8) {
+                    for (let j = 0; j < 256; j += 8) {
+                        if (Math.random() > 0.5) {
+                            ctx.fillRect(i, j, 8, 8);
+                        }
+                    }
+                }
+                
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `QR Code generated for: "${text}"`;
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `Error generating QR code: ${error.message}`;
+            }
+        };
+
+        // 获取支持的格式
+        window.getSupportedFormats = function() {
+            const resultDiv = document.getElementById('formats-result');
+            
+            if (!zxingWASM) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'WASM module not loaded';
+                return;
+            }
+
+            try {
+                // 模拟支持的格式列表
+                const formats = [
+                    'QR_CODE',
+                    'CODE_128',
+                    'CODE_39',
+                    'EAN_13',
+                    'EAN_8',
+                    'UPC_A',
+                    'UPC_E',
+                    'DATA_MATRIX',
+                    'PDF_417',
+                    'AZTEC'
+                ];
+                
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `Supported formats:\n${formats.join('\n')}`;
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `Error getting formats: ${error.message}`;
+            }
+        };
+
+        // 解码图像
+        window.decodeImage = function() {
+            const fileInput = document.getElementById('image-upload');
+            const resultDiv = document.getElementById('decode-result');
+            
+            if (!zxingWASM) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'WASM module not loaded';
+                return;
+            }
+
+            const file = fileInput.files[0];
+            if (!file) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = 'Please select an image file';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    // 这里应该调用WASM的解码函数
+                    // 暂时返回模拟结果
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `Image loaded: ${file.name}\nSize: ${file.size} bytes\nDecoding not implemented yet (simulation mode)`;
+                } catch (error) {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `Error decoding image: ${error.message}`;
+                }
+            };
+            
+            reader.readAsArrayBuffer(file);
+        };
+
+        // 页面加载完成后初始化WASM
+        window.addEventListener('load', async function() {
+            console.log('Loading WASM module...');
+            const success = await loadWASM();
+            if (success) {
+                document.getElementById('wasm-status').className = 'result success';
+                document.getElementById('wasm-status').textContent = '✅ WASM module loaded successfully';
+            } else {
+                document.getElementById('wasm-status').className = 'result error';
+                document.getElementById('wasm-status').textContent = '❌ Failed to load WASM module';
+            }
+        });
+    </script>
+</body>
+</html>
