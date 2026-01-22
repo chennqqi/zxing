@@ -161,11 +161,9 @@ func (u *universalZXing) decodeWithWASM(ctx context.Context, data []byte, width,
 
 // decodeWithCGO 使用 CGO 后端解码
 func (u *universalZXing) decodeWithCGO(ctx context.Context, data []byte, width, height int, opts *DecodeOptions) (*Result, error) {
-	// 创建CGO实例并调用
-	cgoImpl := &cgoZXing{
-		config: u.config,
-	}
-	return cgoImpl.DecodeBytes(ctx, data, width, height, opts)
+	// 尝试使用CGO实现（如果可用）
+	// 如果CGO不可用，会返回错误
+	return decodeWithCGOImpl(ctx, u.config, data, width, height, opts)
 }
 
 // encodeWithWASM 使用 WASM 后端编码
@@ -214,9 +212,7 @@ func (u *universalZXing) encodeWithWASM(ctx context.Context, text string, opts *
 
 // encodeWithCGO 使用 CGO 后端编码
 func (u *universalZXing) encodeWithCGO(ctx context.Context, text string, opts *EncodeOptions) (image.Image, error) {
-	// 创建CGO实例并调用
-	cgoImpl := &cgoZXing{
-		config: u.config,
-	}
-	return cgoImpl.EncodeText(ctx, text, opts)
+	// 尝试使用CGO实现（如果可用）
+	// 如果CGO不可用，会返回错误
+	return encodeWithCGOImpl(ctx, u.config, text, opts)
 }

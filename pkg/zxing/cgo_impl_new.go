@@ -192,6 +192,22 @@ func (c *cgoZXing) GetBackend() Backend {
 	return BackendCGO
 }
 
+// decodeWithCGOImpl CGO解码实现（供universal_impl调用）
+func decodeWithCGOImpl(ctx context.Context, config *Config, data []byte, width, height int, opts *DecodeOptions) (*Result, error) {
+	cgoImpl := &cgoZXing{
+		config: config,
+	}
+	return cgoImpl.DecodeBytes(ctx, data, width, height, opts)
+}
+
+// encodeWithCGOImpl CGO编码实现（供universal_impl调用）
+func encodeWithCGOImpl(ctx context.Context, config *Config, text string, opts *EncodeOptions) (image.Image, error) {
+	cgoImpl := &cgoZXing{
+		config: config,
+	}
+	return cgoImpl.EncodeText(ctx, text, opts)
+}
+
 // 辅助函数：将bool转换为int
 func boolToInt(b bool) int {
 	if b {
