@@ -3,12 +3,21 @@
 // CGO 实现 - 集成现有的CGO代码
 package zxing
 
+/*
+#cgo CXXFLAGS: -std=c++17 -I. -I./include -I./zxing-cpp/core/src
+#cgo LDFLAGS: -L./lib/windows/x64 -L./lib/linux/x64 -lzxingwrapper -lZXing -lstdc++
+#include <stdlib.h>
+#include "include/zxing.h"
+*/
+import "C"
 import (
 	"context"
 	"fmt"
 	"image"
 	"image/color"
+	"image/png"
 	"os"
+	"unsafe"
 )
 
 // cgoZXing CGO 实现
@@ -60,31 +69,57 @@ func (c *cgoZXing) DecodeBytes(ctx context.Context, data []byte, width, height i
 	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
 
-	// 将字节数据写入临时文件
-	// 这里需要实现图像编码逻辑，暂时使用简单的实现
-	// TODO: 实现正确的图像编码
+	// 将字节数据编码为PNG图像并写入临时文件
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			idx := (y*width + x) * 4
+			if idx+3 < len(data) {
+				img.Set(x, y, color.RGBA{
+					R: data[idx],
+					G: data[idx+1],
+					B: data[idx+2],
+					A: data[idx+3],
+				})
+			}
+		}
+	}
+	
+	// 编码为PNG
+	encoder := &png.Encoder{}
+	if err := encoder.Encode(tempFile, img); err != nil {
+		return nil, fmt.Errorf("failed to encode image: %w", err)
+	}
+	tempFile.Close()
 
-	// 调用CGO解码
-	cgoOpts := &cgo.DecodeOptions{
-		Formats:      cgo.FormatAll,
-		TryHarder:    opts.TryHarder,
-		TryRotate:    true, // 默认启用旋转
-		TryInvert:    true, // 默认启用反转
-		TryDownscale: true, // 默认启用缩放
+	// 调用CGO解码函数
+	cPath := C.CString(tempFile.Name())
+	defer C.free(unsafe.Pointer(cPath))
+
+	// 创建C解码选项
+	cOptions := C.DecodeOptions{
+		formats:       C.int(C.FORMAT_ALL),
+		try_harder:    C.int(boolToInt(opts.TryHarder)),
+		try_rotate:    C.int(1), // 默认启用旋转
+		try_invert:    C.int(0), // 默认不启用反转
+		try_downscale: C.int(1), // 默认启用缩放
 	}
 
-	result, err := cgo.Decode(tempFile.Name(), cgoOpts)
-	if err != nil {
-		return nil, fmt.Errorf("CGO decode failed: %w", err)
+	// 调用C函数解码
+	result := C.decode_barcode(cPath, &cOptions)
+	if result == nil {
+		errorMsg := C.GoString(C.get_last_error())
+		return nil, fmt.Errorf("CGO decode failed: %s", errorMsg)
 	}
+	defer C.free_result(result)
 
 	// 转换结果格式
 	return &Result{
-		Text:   result.Text,
-		Format: result.Format.String(),
-		Points: []image.Point{}, // TODO: 从CGO结果中提取位置信息
+		Text:   C.GoString(result.text),
+		Format: formatToString(C.int(result.format)),
+		Points: []image.Point{}, // C API暂不支持位置信息
 		Metadata: map[string]interface{}{
-			"confidence": result.Confidence,
+			"confidence": float32(result.confidence),
 			"backend":    "cgo",
 		},
 	}, nil
@@ -104,8 +139,9 @@ func (c *cgoZXing) EncodeText(ctx context.Context, text string, opts *EncodeOpti
 		}
 	}
 
-	// TODO: 实现CGO编码逻辑
-	// 目前返回一个简单的图像
+	// CGO编码功能暂未实现，因为zxing-cpp主要专注于解码
+	// 如果需要编码功能，建议使用WASM后端或其他专门的编码库
+	// 这里返回一个占位图像
 	img := image.NewRGBA(image.Rect(0, 0, opts.Width, opts.Height))
 
 	// 填充白色背景
@@ -115,7 +151,7 @@ func (c *cgoZXing) EncodeText(ctx context.Context, text string, opts *EncodeOpti
 		}
 	}
 
-	return img, nil
+	return img, fmt.Errorf("encoding not implemented in CGO backend, please use WASM backend for encoding")
 }
 
 // EncodeToBytes 编码文本为字节数据
@@ -154,4 +190,48 @@ func (c *cgoZXing) Close() error {
 // GetBackend 获取当前使用的后端类型
 func (c *cgoZXing) GetBackend() Backend {
 	return BackendCGO
+}
+
+// 辅助函数：将bool转换为int
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// 辅助函数：将C格式枚举转换为字符串
+func formatToString(format C.int) string {
+	switch format {
+	case C.FORMAT_QR_CODE:
+		return "QR_CODE"
+	case C.FORMAT_CODE_128:
+		return "CODE_128"
+	case C.FORMAT_CODE_39:
+		return "CODE_39"
+	case C.FORMAT_CODE_93:
+		return "CODE_93"
+	case C.FORMAT_EAN_8:
+		return "EAN_8"
+	case C.FORMAT_EAN_13:
+		return "EAN_13"
+	case C.FORMAT_UPC_A:
+		return "UPC_A"
+	case C.FORMAT_UPC_E:
+		return "UPC_E"
+	case C.FORMAT_DATA_MATRIX:
+		return "DATA_MATRIX"
+	case C.FORMAT_PDF_417:
+		return "PDF_417"
+	case C.FORMAT_AZTEC:
+		return "AZTEC"
+	case C.FORMAT_CODABAR:
+		return "CODABAR"
+	case C.FORMAT_ITF:
+		return "ITF"
+	case C.FORMAT_MAXICODE:
+		return "MAXICODE"
+	default:
+		return "UNKNOWN"
+	}
 }

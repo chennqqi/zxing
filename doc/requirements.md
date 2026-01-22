@@ -62,3 +62,12 @@
 - 为zxing的Go wrapper项目添加WASM方式集成，通过WASM方式Go集成zxing，避免使用CGO
 - 当前项目通过两种方式wrap zxingcpp：CGO方式和WASM方式
 - 已完成编译测试和真实数据测试
+
+### 2024年12月需求分析
+- 分析项目目标达成度，发现以下未完成任务：
+  1. CMakeLists.txt生成的是动态库，需要改为静态库
+  2. 缺少lib目录来存放编译好的静态库文件
+  3. 缺少编译好的Windows/Linux静态库和WASM文件
+  4. CGO实现中有TODO标记，需要完善
+  5. 需要创建过程性脚本来编译和保存静态库
+- 详细分析见：doc/project-goal-analysis.md
