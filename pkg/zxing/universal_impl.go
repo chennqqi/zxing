@@ -57,7 +57,21 @@ func (u *universalZXing) DecodeBytes(ctx context.Context, data []byte, width, he
 	case BackendWASM:
 		return u.decodeWithWASM(ctx, data, width, height, opts)
 	case BackendCGO:
-		return u.decodeWithCGO(ctx, data, width, height, opts)
+		// 尝试使用CGO解码
+		result, err := u.decodeWithCGO(ctx, data, width, height, opts)
+		if err != nil {
+			// CGO不可用，如果是auto模式，回退到WASM
+			if u.config.Backend == BackendAuto {
+				if u.config.Debug {
+					fmt.Printf("CGO backend failed, falling back to WASM: %v\n", err)
+				}
+				// 临时切换到WASM后端
+				u.backend = BackendWASM
+				return u.decodeWithWASM(ctx, data, width, height, opts)
+			}
+			return nil, err
+		}
+		return result, nil
 	default:
 		return nil, fmt.Errorf("unsupported backend: %s", u.backend)
 	}

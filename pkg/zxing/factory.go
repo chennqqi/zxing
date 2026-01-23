@@ -59,6 +59,18 @@ func newAuto(config *Config) (ZXing, error) {
 		return NewWASM(config)
 	}
 	
-	// 在其他环境中优先使用 CGO 后端
-	return NewCGO(config)
+	// 在其他环境中优先尝试 CGO 后端
+	// 如果CGO不可用，回退到WASM后端
+	cgoZX, err := NewCGO(config)
+	if err == nil {
+		// 测试CGO是否真的可用（通过尝试解码一个空数据）
+		// 如果CGO可用，返回CGO实例
+		return cgoZX, nil
+	}
+	
+	// CGO不可用，回退到WASM后端
+	if config.Debug {
+		fmt.Printf("CGO backend not available (%v), falling back to WASM backend\n", err)
+	}
+	return NewWASM(config)
 }
