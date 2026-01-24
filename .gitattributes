@@ -1,0 +1,37 @@
+# Ensure shell scripts always use LF line endings
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Ensure Windows scripts use CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Source code
+*.cpp text eol=lf
+*.h text eol=lf
+*.go text eol=lf
+*.c text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+
+# Build files
+CMakeLists.txt text eol=lf
+Makefile text eol=lf
+*.cmake text eol=lf
+
+# Binary files
+*.wasm binary
+*.so binary
+*.a binary
+*.lib binary
+*.dll binary
+*.exe binary
+*.png binary
+*.jpg binary
+*.jpeg binary
