@@ -8,6 +8,13 @@
 #include <cstring>
 #include <cstdlib>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#define EXPORT EMSCRIPTEN_KEEPALIVE
+#else
+#define EXPORT
+#endif
+
 // 包含stb_image用于图像加载
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -118,7 +125,7 @@ void zxing_free_results(DecodeResultInternal** results, int count) {
 }
 
 // 创建默认解码选项
-DecodeOptions* create_default_options() {
+EXPORT DecodeOptions* create_default_options() {
     DecodeOptions* options = new DecodeOptions();
     if (!options) {
         set_error("Failed to allocate memory for options");
@@ -135,12 +142,12 @@ DecodeOptions* create_default_options() {
 }
 
 // 释放解码选项
-void free_options(DecodeOptions* options) {
+EXPORT void free_options(DecodeOptions* options) {
     delete options;
 }
 
 // 解码单个条码 - 主要实现，直接使用ZXing-cpp
-DecodeResult* decode_barcode(const char* image_path, const DecodeOptions* options) {
+EXPORT DecodeResult* decode_barcode(const char* image_path, const DecodeOptions* options) {
     try {
         // 使用stb_image加载图像
         int width, height, channels;
@@ -191,7 +198,7 @@ DecodeResult* decode_barcode(const char* image_path, const DecodeOptions* option
 }
 
 // 解码多个条码 - 主要实现，直接使用ZXing-cpp
-DecodeResult** decode_barcodes(const char* image_path, const DecodeOptions* options, int* count) {
+EXPORT DecodeResult** decode_barcodes(const char* image_path, const DecodeOptions* options, int* count) {
     try {
         // 使用stb_image加载图像
         int width, height, channels;
@@ -255,7 +262,7 @@ DecodeResult** decode_barcodes(const char* image_path, const DecodeOptions* opti
 }
 
 // 获取解码结果
-DecodeResult* decode_result_get(DecodeResult** results, int index) {
+EXPORT DecodeResult* decode_result_get(DecodeResult** results, int index) {
     if (!results || index < 0) {
         return nullptr;
     }
@@ -263,7 +270,7 @@ DecodeResult* decode_result_get(DecodeResult** results, int index) {
 }
 
 // 释放单个解码结果
-void free_result(DecodeResult* result) {
+EXPORT void free_result(DecodeResult* result) {
     if (result) {
         free(result->text);
         delete result;
@@ -271,7 +278,7 @@ void free_result(DecodeResult* result) {
 }
 
 // 释放多个解码结果
-void free_results(DecodeResult** results, int count) {
+EXPORT void free_results(DecodeResult** results, int count) {
     if (results) {
         for (int i = 0; i < count; i++) {
             free_result(results[i]);
@@ -281,6 +288,6 @@ void free_results(DecodeResult** results, int count) {
 }
 
 // 获取错误信息
-const char* get_last_error() {
+EXPORT const char* get_last_error() {
     return last_error;
-} 
+}
