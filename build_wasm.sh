@@ -38,9 +38,14 @@ cd "$BUILD_DIR"
 
 # 配置CMake
 echo "Configuring CMake..."
-cmake \
+
+# 临时使用WASM配置文件
+cp ../CMakeLists-wasm.txt ../CMakeLists.txt.wasm.bak
+cp ../CMakeLists.txt ../CMakeLists-cgo.txt.bak
+cp ../CMakeLists-wasm.txt ../CMakeLists.txt
+
+emcmake cmake \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-    -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
     ..
 
 # 构建项目
@@ -84,3 +89,10 @@ echo "WASM build completed successfully!"
 
 # 返回原目录
 cd ..
+
+# 恢复原始CMakeLists.txt
+if [ -f "CMakeLists-cgo.txt.bak" ]; then
+    mv CMakeLists-cgo.txt.bak CMakeLists.txt
+    rm -f CMakeLists.txt.wasm.bak
+    echo "Restored original CMakeLists.txt"
+fi

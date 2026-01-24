@@ -94,15 +94,13 @@ fi
 
 cd ..
 
-echo "Building Go library..."
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    go build -o bin/libzxinggo.dylib -buildmode=c-shared cmd/cshared/main.go
-else
-    go build -o bin/libzxinggo.so -buildmode=c-shared cmd/cshared/main.go
-fi
+echo "Building Go CLI..."
+go build -o bin/zxing-cli ./cmd/zxing-cli/
 if [ $? -ne 0 ]; then
     echo "Error: Go build failed"
     exit 1
 fi
 
-echo "Build completed successfully!" 
+echo "Build completed successfully!"
+echo "Static library installed to: lib/"
+echo "CLI binary installed to: bin/zxing-cli"
