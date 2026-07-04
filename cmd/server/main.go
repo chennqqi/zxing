@@ -1,21 +1,29 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"image"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/chennqqi/zxing"
+	"github.com/chennqqi/zxing/pkg/zxing"
 	"github.com/gin-gonic/gin"
 )
 
 // 上传文件大小限制
 const maxUploadSize = 10 * 1024 * 1024 // 10MB
 
-// 解码结果
+// DecodeResult represents a single barcode decode result.
+type DecodeResult struct {
+	Text   string `json:"text"`
+	Format string `json:"format"`
+}
+
+// DecodeResponse represents the API response for decode endpoint.
 type DecodeResponse struct {
 	Success bool            `json:"success"`
 	Message string          `json:"message,omitempty"`
@@ -95,61 +103,47 @@ func main() {
 			return
 		}
 
-		// 创建解码选项
-		opts := zxing.NewDefaultOptions()
-		if opts == nil {
+		// Open and decode the uploaded image
+		f, err := os.Open(filepath)
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, DecodeResponse{
 				Success: false,
-				Message: "Failed to create decode options",
+				Message: "Failed to open uploaded file",
+			})
+			return
+		}
+		defer f.Close()
+
+		img, _, err := image.Decode(f)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, DecodeResponse{
+				Success: false,
+				Message: fmt.Sprintf("Failed to decode image: %v", err),
 			})
 			return
 		}
 
-		// 设置解码选项
-		opts.TryHarder = req.TryHarder
-		opts.TryRotate = req.TryRotate
-		opts.TryInvert = req.TryInvert
-		opts.TryDownscale = req.TryDownscale
+		// Create ZXing instance
+		zx, err := zxing.New(nil)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, DecodeResponse{
+				Success: false,
+				Message: fmt.Sprintf("Failed to create ZXing instance: %v", err),
+			})
+			return
+		}
+		defer zx.Close()
 
-		// 设置解码格式
+		// Create decode options
+		opts := &zxing.DecodeOptions{
+			TryHarder: req.TryHarder,
+		}
 		if len(req.Formats) > 0 {
-			opts.Formats = 0
-			for _, format := range req.Formats {
-				switch format {
-				case "QR_CODE":
-					opts.Formats |= zxing.FormatQRCode
-				case "AZTEC":
-					opts.Formats |= zxing.FormatAztec
-				case "CODABAR":
-					opts.Formats |= zxing.FormatCodabar
-				case "CODE_39":
-					opts.Formats |= zxing.FormatCode39
-				case "CODE_93":
-					opts.Formats |= zxing.FormatCode93
-				case "CODE_128":
-					opts.Formats |= zxing.FormatCode128
-				case "DATA_MATRIX":
-					opts.Formats |= zxing.FormatDataMatrix
-				case "EAN_8":
-					opts.Formats |= zxing.FormatEAN8
-				case "EAN_13":
-					opts.Formats |= zxing.FormatEAN13
-				case "ITF":
-					opts.Formats |= zxing.FormatITF
-				case "MAXICODE":
-					opts.Formats |= zxing.FormatMaxiCode
-				case "PDF_417":
-					opts.Formats |= zxing.FormatPDF417
-				case "UPC_A":
-					opts.Formats |= zxing.FormatUPCA
-				case "UPC_E":
-					opts.Formats |= zxing.FormatUPCE
-				}
-			}
+			opts.PossibleFormats = req.Formats
 		}
 
-		// 解码图片
-		results, err := zxing.DecodeMulti(filepath, opts)
+		// Decode the image
+		result, err := zx.DecodeImage(context.Background(), img, opts)
 		if err != nil {
 			c.JSON(http.StatusOK, DecodeResponse{
 				Success: false,
@@ -158,10 +152,18 @@ func main() {
 			return
 		}
 
-		// 返回结果
+		// Convert to API response
+		var apiResults []*DecodeResult
+		if result != nil && len(result.Text) > 0 {
+			apiResults = append(apiResults, &DecodeResult{
+				Text:   result.Text,
+				Format: result.Format,
+			})
+		}
+
 		c.JSON(http.StatusOK, DecodeResponse{
 			Success: true,
-			Results: results,
+			Results: apiResults,
 		})
 	})
 

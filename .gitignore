@@ -38,7 +38,7 @@ compare_report.txt
 extract_our_success.py
 test
 *.bak
-lib
+lib64
 tests.zip
 qrcode_image.zip
 test_report.txt
