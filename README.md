@@ -1,104 +1,67 @@
 # ZXing Go
 
-这是一个基于 [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) 的 Go 语言条码识别库。
-
-## 🚀 新特性：WASM 集成
-
-现在支持 **WebAssembly (WASM)** 集成，提供无 CGO 依赖的替代方案！
-
-- ✅ **无 CGO 依赖**: 通过 WASM 避免复杂的 C++ 编译
-- ✅ **统一接口**: CGO 和 WASM 后端完全兼容
-- ✅ **自动选择**: 根据环境自动选择最佳后端
-- ✅ **跨平台**: 更好的跨平台兼容性
+基于 [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) 的 Go 语言条码识别库，支持 CGO 和 WASM (wazero) 双后端。
 
 ## 功能特性
 
-- 支持多种条码格式：
-  - QR Code
-  - Aztec
-  - Codabar
-  - Code 39/93/128
-  - Data Matrix
-  - EAN-8/13
-  - ITF
-  - MaxiCode
-  - PDF417
-  - UPC-A/E
+- 支持多种条码格式：QR Code, Aztec, Codabar, Code 39/93/128, Data Matrix, EAN-8/13, ITF, MaxiCode, PDF417, UPC-A/E
 - 支持单条码和多条码识别
-- 提供丰富的解码选项
-- 支持错误处理
-- **新增**: 支持 CGO 和 WASM 两种后端
+- 双后端架构：
+  - **CGO 后端**：原生 C++ 静态库，最高性能
+  - **WASM 后端**：基于 [wazero](https://github.com/tetratelabs/wazero) 的纯 Go WASM 运行时，无 CGO 依赖
+- 编译期后端选择：通过 Go build tags 自动选择
+- 跨平台支持：Linux, Windows, macOS
 
-## 依赖要求
+## 后端选择
 
-### 传统 CGO 方式
-- Go 1.18 或更高版本
-- CMake 3.10 或更高版本
-- C++17 兼容的编译器
-- zxing-cpp 库
+后端通过编译期 build tags 自动选择：
 
-### 新的 WASM 方式
-- Go 1.18 或更高版本
-- 无需 CGO 和 C++ 编译器
+| 条件 | 后端 | 说明 |
+|------|------|------|
+| `CGO_ENABLED=1` + Linux/Windows | CGO | 原生 C++ 静态库 |
+| `CGO_ENABLED=0` 或 macOS | WASM (wazero) | 纯 Go WASM 运行时 |
+| `GOOS=js GOARCH=wasm` | WASM (js) | 浏览器/Node.js 环境 |
+
+也可通过 `Config.Backend` 手动指定：
+
+```go
+// 自动选择（默认）
+zx, _ := zxing.New(nil)
+
+// 强制使用 WASM
+zx, _ := zxing.New(&zxing.Config{Backend: zxing.BackendWASM})
+
+// 强制使用 CGO
+zx, _ := zxing.New(&zxing.Config{Backend: zxing.BackendCGO})
+```
 
 ## 快速开始
 
+### WASM 后端（无需 CGO）
+
 ```bash
-# 克隆项目（包含子模块）
+# 克隆项目
 git clone --recursive https://github.com/chennqqi/zxing.git
 cd zxing
 
-# 如果已经克隆过，初始化子模块
-git submodule update --init --recursive
-
-# 构建项目
-go build ./pkg/zxing/
-go build ./cmd/wasm-example/
-
-# 运行示例
-go run ./cmd/wasm-example/
+# 使用 WASM 后端构建（默认）
+CGO_ENABLED=0 go build ./pkg/zxing/
 
 # 运行测试
-go test ./pkg/zxing/ -v
+CGO_ENABLED=0 go test ./pkg/zxing/ -v
+```
+
+### CGO 后端
+
+```bash
+# 使用构建工具（推荐）
+go run ./cmd/build build-go
+
+# 或手动构建
+CGO_ENABLED=1 go build ./pkg/zxing/
 ```
 
 ## 使用示例
-
-### 传统 CGO 方式
-
-```go
-package main
-
-import (
-    "fmt"
-    "log"
-
-    "github.com/chennqqi/zxing"
-)
-
-func main() {
-    // 创建默认选项
-    options := zxing.NewDefaultOptions()
-    if options == nil {
-        log.Fatal("Failed to create default options")
-    }
-
-    // 设置只识别二维码
-    options.Formats = zxing.FormatQRCode
-
-    // 解码单个二维码
-    result, err := zxing.Decode("test.png", options)
-    if err != nil {
-        log.Fatalf("Failed to decode: %v", err)
-    }
-
-    fmt.Printf("Decoded text: %s\n", result.Text)
-    fmt.Printf("Format: %v\n", result.Format)
-    fmt.Printf("Confidence: %.2f\n", result.Confidence)
-}
-```
-
-### 新的统一接口（支持 WASM）
 
 ```go
 package main
@@ -112,97 +75,83 @@ import (
 )
 
 func main() {
-    // 方法1: 自动选择后端
+    // 自动选择后端
     zx, err := zxing.New(nil)
     if err != nil {
         log.Fatal(err)
     }
     defer zx.Close()
 
-    // 方法2: 明确使用 WASM 后端
-    zx, err = zxing.NewWASM()
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer zx.Close()
-
-    // 编码文本为二维码
-    opts := &zxing.EncodeOptions{
-        Width:  256,
-        Height: 256,
-        Format: "QR_CODE",
-    }
-    
-    img, err := zx.EncodeText(context.Background(), "Hello, WASM!", opts)
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    fmt.Printf("生成二维码: %dx%d\n", img.Bounds().Dx(), img.Bounds().Dy())
-
     // 解码图像
-    result, err := zx.DecodeImage(context.Background(), img, nil)
+    result, err := zx.DecodeImage(context.Background(), img, &zxing.DecodeOptions{
+        TryHarder: true,
+    })
     if err != nil {
         log.Fatal(err)
     }
-    
-    fmt.Printf("解码结果: %s (格式: %s)\n", result.Text, result.Format)
+
+    fmt.Printf("解码结果: %s (格式: %s, 后端: %s)\n",
+        result.Text, result.Format, zx.GetBackend())
 }
 ```
 
-## 配置选项
+## 构建工具
 
-### 环境变量配置
+项目提供统一的构建工具 `cmd/build/`，替代所有碎片化脚本：
 
 ```bash
-# 指定使用 WASM 后端
-export ZXING_BACKEND=wasm
+# 构建 Go 包
+go run ./cmd/build build-go
 
-# 指定 WASM 模块路径  
-export ZXING_WASM_PATH=./wasm/zxing.wasm
+# 构建 C++ 静态库
+go run ./cmd/build build-lib
+
+# 构建 WASM 模块（需要 Emscripten）
+go run ./cmd/build build-wasm
+
+# 构建全部
+go run ./cmd/build build-all
+
+# 同步 ZXing-CPP 头文件
+go run ./cmd/build sync-headers
+
+# 运行测试
+go run ./cmd/build test
+
+# 清理构建产物
+go run ./cmd/build clean
+
+# Docker 中构建 Linux 静态库（CentOS 7, glibc 2.17 兼容）
+go run ./cmd/build docker-build
+```
+
+## 环境变量配置
+
+```bash
+# 指定后端
+export ZXING_BACKEND=auto    # auto | cgo | wasm
+
+# 指定 WASM 模块路径
+export ZXING_WASM_PATH=wasm/zxingwrapper.wasm
 
 # 启用调试模式
 export ZXING_DEBUG=true
 
-# 运行程序
-go run ./cmd/wasm-example/
+# 超时时间（秒）
+export ZXING_TIMEOUT=30
 ```
 
-### 代码配置
+## API
 
-```go
-config := &zxing.Config{
-    Backend:  zxing.BackendWASM,
-    WASMPath: "path/to/zxing.wasm",
-    Timeout:  30,
-    Debug:    true,
-}
-
-zx, err := zxing.New(config)
-```
-
-## API 文档
-
-### 主要接口
+### ZXing 接口
 
 ```go
 type ZXing interface {
-    // 解码图像
     DecodeImage(ctx context.Context, img image.Image, opts *DecodeOptions) (*Result, error)
-    
-    // 解码字节数据
     DecodeBytes(ctx context.Context, data []byte, width, height int, opts *DecodeOptions) (*Result, error)
-    
-    // 编码文本为图像
     EncodeText(ctx context.Context, text string, opts *EncodeOptions) (image.Image, error)
-    
-    // 编码文本为字节数据
     EncodeToBytes(ctx context.Context, text string, opts *EncodeOptions) ([]byte, int, int, error)
-    
-    // 关闭资源
     Close() error
-    
-    // 获取后端类型
     GetBackend() Backend
 }
 ```
@@ -213,74 +162,43 @@ type ZXing interface {
 // 自动选择后端
 zx, err := zxing.New(nil)
 
-// 使用 CGO 后端
-zx, err := zxing.NewCGO()
+// 指定 CGO 后端
+zx, err := zxing.NewCGO(config)
 
-// 使用 WASM 后端
-zx, err := zxing.NewWASM()
-
-// 使用指定后端
-zx, err := zxing.NewWithBackend(zxing.BackendWASM)
+// 指定 WASM 后端
+zx, err := zxing.NewWASM(config)
 ```
 
-## 构建选项
+## 项目结构
 
-### 构建 WASM 版本
-
-```bash
-# 构建 Go WASM 程序
-GOOS=js GOARCH=wasm go build -o wasm/app.wasm ./cmd/wasm-example/
-
-# 复制 wasm_exec.js
-cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" wasm/
 ```
-
-### 构建 CGO 版本
-
-```bash
-# 构建 CGO 版本
-CGO_ENABLED=1 go build -tags cgo ./cmd/wasm-example/
-```
-
-## 安装依赖（仅 CGO 方式需要）
-
-### Windows
-
-```bash
-# 使用 vcpkg 安装 zxing-cpp
-vcpkg install zxing-cpp:x64-windows
-```
-
-### Ubuntu/Debian
-
-```bash
-# 安装构建工具
-sudo apt-get update
-sudo apt-get install -y build-essential cmake
-
-# 安装 zxing-cpp
-sudo apt-get install -y libzxing-dev
-```
-
-### CentOS/RHEL
-
-```bash
-# 安装构建工具
-sudo yum groupinstall "Development Tools"
-sudo yum install cmake
-
-# 安装 zxing-cpp
-sudo yum install zxing-cpp-devel
-```
-
-### macOS
-
-```bash
-# 安装构建工具
-brew install cmake
-
-# 安装 zxing-cpp
-brew install zxing-cpp
+zxing/
+├── cmd/
+│   ├── build/                 # 统一构建工具
+│   ├── zxing-cli/             # 命令行工具
+│   └── server/                # HTTP 服务
+├── pkg/
+│   ├── zxing/                 # 统一接口层
+│   │   ├── interface.go       # ZXing 接口定义
+│   │   ├── config.go          # 配置
+│   │   ├── factory.go         # 后端工厂
+│   │   ├── cgo_binding_linux.go   # Linux CGO 绑定
+│   │   ├── cgo_binding_windows.go # Windows CGO 绑定
+│   │   ├── cgo_impl.go        # CGO 实现
+│   │   ├── cgo_stub.go        # CGO stub（非 CGO 平台）
+│   │   ├── wasm_impl.go       # wazero WASM 实现
+│   │   ├── wasm_impl_js.go    # js/wasm 实现
+│   │   └── wasm_stub.go       # WASM stub（CGO 平台）
+│   └── wasm/                  # WASM 运行时
+│       ├── runtime_wazero.go  # wazero 运行时
+│       ├── runtime_js.go      # js/wasm 运行时
+│       └── runtime_stub.go    # 运行时 stub
+├── include/                   # C/C++ 头文件
+├── lib/                       # 预编译静态库
+├── wasm/                      # WASM 模块
+├── docker/                    # Docker 构建环境
+├── src/                       # C++ wrapper 源码
+└── CMakeLists.txt             # CMake 构建配置
 ```
 
 ## 性能对比
@@ -288,54 +206,22 @@ brew install zxing-cpp
 | 后端 | 编译时间 | 运行性能 | 内存使用 | 跨平台性 | CGO 依赖 |
 |------|----------|----------|----------|----------|----------|
 | CGO  | 慢       | 最快     | 低       | 受限     | 是       |
-| WASM | 中等     | 快       | 中等     | 优秀     | 否       |
-
-## 项目结构
-
-```
-zxing/
-├── cmd/
-│   └── wasm-example/          # WASM 示例程序
-├── pkg/
-│   ├── zxing/                 # 统一接口层
-│   └── wasm/                  # WASM 运行时
-├── wasm/                      # WASM 构建文件
-├── doc/                       # 文档
-├── scripts/                   # 构建脚本
-└── README.md
-```
-
-## 文档
-
-- [WASM 集成指南](doc/wasm-integration-guide.md)
-- [需求分析](doc/requirements-analysis.md)
-- [开发需求](doc/requirements.md)
+| WASM | 快       | 快       | 中等     | 优秀     | 否       |
 
 ## 测试
 
 ```bash
-# 运行单元测试
-go test ./pkg/zxing/ -v
+# WASM 后端测试
+CGO_ENABLED=0 go test ./pkg/zxing/ -v
 
-# 运行基准测试
-go test -bench=. ./pkg/zxing/
+# CGO 后端测试
+CGO_ENABLED=1 go test ./pkg/zxing/ -v
 
-# 测试覆盖率
-go test -cover ./pkg/zxing/
-```
+# 构建工具测试
+go test ./cmd/build/ -v
 
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-### 开发环境设置
-
-```bash
-git clone --recursive https://github.com/chennqqi/zxing.git
-cd zxing
-git submodule update --init --recursive
-go mod tidy
-go test ./...
+# WASM 运行时测试
+CGO_ENABLED=0 go test ./pkg/wasm/ -v
 ```
 
 ## 许可证
@@ -346,4 +232,5 @@ MIT License
 
 - [ZXing 官方项目](https://github.com/zxing/zxing)
 - [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp)
+- [wazero](https://github.com/tetratelabs/wazero)
 - [WebAssembly](https://webassembly.org/)
