@@ -5,12 +5,15 @@ import (
 	"runtime"
 )
 
-// New 创建新的 ZXing 实例
+// New creates a new ZXing instance with the given configuration.
+// When Backend is Auto, the backend is selected at compile time:
+// - CGO is used when CGO_ENABLED=1 on linux or windows
+// - WASM (wazero) is used otherwise
 func New(config *Config) (ZXing, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
-	
+
 	switch config.Backend {
 	case BackendCGO:
 		return NewCGO(config)
@@ -23,54 +26,42 @@ func New(config *Config) (ZXing, error) {
 	}
 }
 
-// NewCGO 创建 CGO 后端实例
+// NewCGO creates a CGO backend instance.
+// Returns an error if CGO is not available on the current platform.
 func NewCGO(config *Config) (ZXing, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
-	
-	impl := &universalZXing{
-		backend: BackendCGO,
-		config:  config,
-	}
-	
-	return impl, nil
+	return &cgoZXing{config: config}, nil
 }
 
-// NewWASM 创建 WASM 后端实例
+// NewWASM creates a WASM (wazero) backend instance.
+// Returns an error if the WASM runtime cannot be initialized.
 func NewWASM(config *Config) (ZXing, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
-	
-	impl := &universalZXing{
-		backend: BackendWASM,
-		config:  config,
-	}
-	
-	return impl, nil
+	return &wasmZXing{config: config}, nil
 }
 
-// newAuto 自动选择后端
+// newAuto selects the backend at compile time based on build tags.
+// On CGO-enabled linux/windows, CGO is preferred.
+// On all other platforms, WASM (wazero) is used.
 func newAuto(config *Config) (ZXing, error) {
-	// 根据运行环境自动选择后端
-	if runtime.GOOS == "js" && runtime.GOARCH == "wasm" {
-		// 在 WASM 环境中优先使用 WASM 后端
-		return NewWASM(config)
-	}
-	
-	// 在其他环境中优先尝试 CGO 后端
-	// 如果CGO不可用，回退到WASM后端
-	cgoZX, err := NewCGO(config)
-	if err == nil {
-		// 测试CGO是否真的可用（通过尝试解码一个空数据）
-		// 如果CGO可用，返回CGO实例
-		return cgoZX, nil
-	}
-	
-	// CGO不可用，回退到WASM后端
-	if config.Debug {
-		fmt.Printf("CGO backend not available (%v), falling back to WASM backend\n", err)
+	// Compile-time backend selection via build tags:
+	// - cgo_impl.go has build tag "cgo && (linux || windows)"
+	// - wasm_impl.go has build tag "!cgo || !(linux || windows)"
+	// At runtime, check which backend is actually available
+	if runtime.GOOS == "linux" || runtime.GOOS == "windows" {
+		// On linux/windows, try CGO first (it may or may not be enabled)
+		// The stub will return an error if CGO is not available
+		zx, err := NewCGO(config)
+		if err == nil {
+			return zx, nil
+		}
+		if config.Debug {
+			fmt.Printf("CGO backend not available (%v), falling back to WASM\n", err)
+		}
 	}
 	return NewWASM(config)
 }

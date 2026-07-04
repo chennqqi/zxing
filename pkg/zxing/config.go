@@ -38,7 +38,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Backend:  BackendAuto,
-		WASMPath: "./wasm/zxing.wasm",
+		WASMPath: "wasm/zxingwrapper.wasm",
 		Debug:    false,
 		Timeout:  30,
 	}

@@ -121,3 +121,38 @@ func decodeWithCGOImpl(ctx context.Context, config *Config, data []byte, width, 
 func encodeWithCGOImpl(ctx context.Context, config *Config, text string, opts *EncodeOptions) (image.Image, error) {
 	return nil, fmt.Errorf("CGO backend is not available (requires CGO_ENABLED=1 on linux or windows)")
 }
+
+// cgoZXing is a stub that returns errors when CGO is not available.
+type cgoZXing struct {
+	config *Config
+}
+
+// DecodeImage returns an error when CGO is not available.
+func (c *cgoZXing) DecodeImage(ctx context.Context, img image.Image, opts *DecodeOptions) (*Result, error) {
+	return nil, fmt.Errorf("CGO backend is not available (requires CGO_ENABLED=1 on linux or windows)")
+}
+
+// DecodeBytes returns an error when CGO is not available.
+func (c *cgoZXing) DecodeBytes(ctx context.Context, data []byte, width, height int, opts *DecodeOptions) (*Result, error) {
+	return nil, fmt.Errorf("CGO backend is not available (requires CGO_ENABLED=1 on linux or windows)")
+}
+
+// EncodeText returns an error when CGO is not available.
+func (c *cgoZXing) EncodeText(ctx context.Context, text string, opts *EncodeOptions) (image.Image, error) {
+	return nil, fmt.Errorf("CGO backend is not available (requires CGO_ENABLED=1 on linux or windows)")
+}
+
+// EncodeToBytes returns an error when CGO is not available.
+func (c *cgoZXing) EncodeToBytes(ctx context.Context, text string, opts *EncodeOptions) ([]byte, int, int, error) {
+	return nil, 0, 0, fmt.Errorf("CGO backend is not available (requires CGO_ENABLED=1 on linux or windows)")
+}
+
+// Close is a no-op stub.
+func (c *cgoZXing) Close() error {
+	return nil
+}
+
+// GetBackend returns the CGO backend type.
+func (c *cgoZXing) GetBackend() Backend {
+	return BackendCGO
+}
