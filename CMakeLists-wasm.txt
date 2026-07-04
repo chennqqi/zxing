@@ -29,10 +29,14 @@ set(ZXING_PYTHON_MODULE OFF CACHE BOOL "Build the python module" FORCE)
 set(EMSCRIPTEN_LINK_FLAGS
     -s WASM=1
     -s STANDALONE_WASM=1
-    -s EXPORTED_FUNCTIONS='["_malloc","_free","_create_default_options","_free_options","_decode_barcode","_decode_barcode_data","_decode_barcodes","_decode_result_get","_free_result","_free_results","_get_last_error"]'
+    -s EXPORTED_FUNCTIONS='["_malloc","_free","_zxing_alloc","_zxing_alloc_reset","_create_default_options","_free_options","_decode_barcode","_decode_barcode_data","_decode_barcodes","_decode_result_get","_free_result","_free_results","_get_last_error"]'
     -s ALLOW_MEMORY_GROWTH=1
-    -O3
+    -O2
     -Wl,--no-entry
+    -Wl,--export=malloc
+    -Wl,--export=free
+    -Wl,--export=zxing_alloc
+    -Wl,--export=zxing_alloc_reset
 )
 
 # 添加ZXingCPP子目录

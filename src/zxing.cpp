@@ -351,3 +351,28 @@ EXPORT DecodeResult* decode_barcode_data(const unsigned char* file_data, int fil
 int main() {
     return 0;
 }
+
+// Wrapper functions for memory management (exported for wazero)
+// Emscripten STANDALONE_WASM may inline malloc/free, so we provide explicit wrappers
+// Use a simple bump allocator from a static buffer
+static unsigned char zxing_alloc_buffer[16 * 1024 * 1024]; // 16MB buffer for image data
+static size_t zxing_alloc_offset = 0;
+
+extern "C" {
+
+EXPORT void* zxing_alloc(size_t size) {
+    // Align to 8 bytes
+    zxing_alloc_offset = (zxing_alloc_offset + 7) & ~7;
+    if (zxing_alloc_offset + size > sizeof(zxing_alloc_buffer)) {
+        zxing_alloc_offset = 0; // wrap around (single-use per decode call)
+    }
+    void* ptr = &zxing_alloc_buffer[zxing_alloc_offset];
+    zxing_alloc_offset += size;
+    return ptr;
+}
+
+EXPORT void zxing_alloc_reset() {
+    zxing_alloc_offset = 0;
+}
+
+} // extern "C"
