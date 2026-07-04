@@ -16,7 +16,7 @@ Refactor the zxing Go wrapper project to be production-ready with stable, easy-t
 
 ### Key Decisions
 
-1. **Pre-compiled static libraries committed to repo** — Linux built in Docker CentOS 7 (glibc 2.17) for maximum compatibility; Windows built with MSVC
+1. **Pre-compiled static libraries committed to repo** — Linux built in Docker CentOS 7 (glibc 2.17) for maximum compatibility; Windows built with MinGW-w64 (consistent with CGO toolchain)
 2. **wazero pure-Go WASM runtime** — WASM backend works in server-side Go via wazero, not just browsers
 3. **Go-based cross-platform build tool** (`cmd/build/`) — replaces all fragmented shell/PowerShell scripts
 4. **Build tags determine backend at compile time** — no runtime backend switching
@@ -30,20 +30,20 @@ pkg/zxing/
   interface.go              # ZXing interface, Result, Options type definitions
   config.go                 # Config, Backend enum
   factory.go                # New() / NewCGO() / NewWASM() factory
-  cgo_impl.go               # //go:build cgo — CGO backend implementation (platform-agnostic Go code)
+  cgo_impl.go               # //go:build cgo && (linux || windows) — CGO backend implementation (platform-agnostic Go code)
   cgo_binding.go            # //go:build cgo && linux — Linux CGO C bindings (#cgo directives + type constants)
   cgo_binding_windows.go    # //go:build cgo && windows — Windows CGO C bindings
-  cgo_stub.go               # //go:build !cgo — CGO unavailable stub
-  wasm_impl.go              # //go:build !cgo — wazero WASM backend implementation (server-side)
+  cgo_stub.go               # //go:build !cgo || !(linux || windows) — CGO unavailable stub (non-linux/windows uses WASM)
+  wasm_impl.go              # //go:build !cgo || !(linux || windows) — wazero WASM backend (server-side, non-CGO platforms)
   wasm_impl_js.go           # //go:build js && wasm — browser WASM implementation (retained)
-  wasm_stub.go              # //go:build cgo && !(js && wasm) — WASM stub when CGO is active
+  wasm_stub.go              # //go:build cgo && (linux || windows) && !(js && wasm) — WASM stub when CGO is active
 ```
 
 ```
 pkg/wasm/
-  runtime.go                # //go:build !cgo — wazero runtime implementation
+  runtime.go                # //go:build !cgo || !(linux || windows) — wazero runtime implementation
   runtime_js.go             # //go:build js && wasm — browser syscall/js runtime (retained)
-  runtime_stub.go           # //go:build cgo && !(js && wasm) — stub
+  runtime_stub.go           # //go:build cgo && (linux || windows) && !(js && wasm) — stub
 ```
 
 ### Backend Selection Matrix
@@ -52,7 +52,11 @@ pkg/wasm/
 |-------------|-------------|--------------|-----------------|
 | CGO_ENABLED=1 (Linux/Windows) | Available | Stub | CGO |
 | CGO_ENABLED=0 (Linux/Windows) | Stub | Available (wazero) | WASM |
+| CGO_ENABLED=1 (macOS/FreeBSD) | Stub | Available (wazero) | WASM |
+| CGO_ENABLED=0 (macOS/FreeBSD) | Stub | Available (wazero) | WASM |
 | GOOS=js GOARCH=wasm | Stub | Available (syscall/js) | WASM |
+
+**Note**: CGO backend is only supported on Linux and Windows. All other platforms (macOS, FreeBSD, etc.) use the WASM backend via wazero, regardless of CGO_ENABLED.
 
 ### Factory Logic
 
@@ -86,14 +90,29 @@ Current `universal_impl.go` contains runtime backend switching logic (CGO fallba
 #cgo LDFLAGS: -L${SRCDIR}/../../lib/windows-x64 -lzxingwrapper -lZXing
 ```
 
-Both files share the same Go code (type constants, `Decode`, `DecodeMulti` functions) — only `#cgo` directives differ. Shared Go code lives in `cgo_impl.go` (`//go:build cgo`).
+Both files share the same Go code (type constants, `Decode`, `DecodeMulti` functions) — only `#cgo` directives differ. Shared Go code lives in `cgo_impl.go` (`//go:build cgo && (linux || windows)`).
+
+**Windows CGO toolchain note**: Go's CGO on Windows uses MinGW-w64 GCC by default, not MSVC. MSVC-compiled C++ static libraries use COFF/MS name mangling and are incompatible with MinGW GCC, especially for C++ ABI, exception handling, and STL. Therefore, Windows static libraries are built with MinGW-w64 (CMake + "MinGW Makefiles" generator), ensuring toolchain consistency with CGO.
 
 ### Pre-compiled Library Sources
 
 | Platform | Build Environment | Artifacts | Compatibility |
 |----------|-------------------|----------|---------------|
-| Linux x64 | Docker CentOS 7 (glibc 2.17, devtoolset-7 GCC 7) | `libZXing.a`, `libzxingwrapper.a` | RHEL 7-10, Debian 9+, Ubuntu 16+ |
-| Windows x64 | Windows + MSVC 2022 | `ZXing.lib`, `zxingwrapper.lib` | Windows 10+ |
+| Linux x64 | Docker CentOS 7 (glibc 2.17, devtoolset-7 GCC 7, Vault mirror) | `libZXing.a`, `libzxingwrapper.a` | RHEL 7-10, Debian 9+, Ubuntu 16+ |
+| Windows x64 | Windows + MinGW-w64 GCC (CMake MinGW Makefiles) | `libZXing.a`, `libzxingwrapper.a` | Windows 10+ |
+
+**CentOS 7 EOL note**: CentOS 7 reached EOL in June 2024. The Docker image uses Vault mirror (`vault.centos.org`) for package repositories. The compatibility target is glibc 2.17. If CentOS 7 images become unavailable, AlmaLinux 7 or Rocky Linux 7 can be used as drop-in replacements.
+
+### Pre-compiled Library Audit Trail
+
+A `lib/BUILDINFO.md` file is maintained alongside the pre-compiled libraries, recording:
+- zxing-cpp version / commit hash
+- Build date and Docker image used (for Linux)
+- Compiler version (GCC/MinGW version)
+- SHA-256 checksums of each library file
+- Build command used to reproduce
+
+CI includes a regression check that rebuilds from source and compares checksums.
 
 ### Header File Management
 
@@ -158,16 +177,27 @@ go run ./cmd/build/ <subcommand> [flags]
 `build-go` and `test` subcommands auto-set environment before running `go build`/`go test`:
 
 ```go
-func setupCGOEnv() error {
+func buildCGOEnv() []string {
     libDir := filepath.Join("lib", runtime.GOOS + "-" + arch)
     includeDir := "include"
-    os.Setenv("CGO_CFLAGS", "-I" + absPath(includeDir))
-    os.Setenv("CGO_CXXFLAGS", "-std=c++17 -I" + absPath(includeDir))
-    os.Setenv("CGO_LDFLAGS", "-L" + absPath(libDir) + " -lzxingwrapper -lZXing -lstdc++ -lm")
-    os.Setenv("CGO_ENABLED", "1")
-    return nil
+    env := os.Environ()
+    env = append(env,
+        "CGO_ENABLED=1",
+        "CGO_CFLAGS=-I"+absPath(includeDir),
+        "CGO_CXXFLAGS=-std=c++17 -I"+absPath(includeDir),
+        "CGO_LDFLAGS=-L"+absPath(libDir)+" -lzxingwrapper -lZXing -lstdc++ -lm",
+    )
+    return env
 }
+
+// exec.Command uses Env field, does not pollute current process environment
+cmd := exec.Command("go", "build", "./...")
+cmd.Env = buildCGOEnv()
+cmd.Stdout = os.Stdout
+cmd.Stderr = os.Stderr
 ```
+
+**Note**: Environment variables are passed via `exec.Cmd.Env`, not `os.Setenv`, to avoid polluting the current process environment.
 
 ### Cross-platform Implementation
 
@@ -186,12 +216,13 @@ zxing/
 │   ├── zxing/              # Unified interface layer
 │   └── wasm/               # WASM runtime (wazero implementation)
 ├── lib/                    # Pre-compiled static libraries
+│   ├── BUILDINFO.md        # Build audit trail (version, checksums, compiler info)
 │   ├── linux-x64/
 │   │   ├── libZXing.a
 │   │   └── libzxingwrapper.a
 │   └── windows-x64/
-│       ├── ZXing.lib
-│       └── zxingwrapper.lib
+│       ├── libZXing.a
+│       └── libzxingwrapper.a
 ├── include/                # C header files
 │   ├── zxing.h
 │   ├── zxing_internal.h
@@ -272,15 +303,28 @@ zxing/
 10. Testing
 11. License
 
+## API Backward Compatibility
+
+The public API (`New()`, `NewCGO()`, `NewWASM()`, `ZXing` interface, `Config`, `Result`, `DecodeOptions`, `EncodeOptions`) remains unchanged. Existing user code does not need modification.
+
+## Error Messages
+
+When pre-compiled libraries are missing, `go build` with CGO will fail with a clear error message from `cmd/build`:
+- Which platform/architecture library is missing
+- How to rebuild: `go run ./cmd/build build-lib` or `go run ./cmd/build docker-build`
+
 ## Implementation Order
 
-1. Restructure `pkg/zxing/` — split CGO bindings by platform, add build tags
-2. Implement wazero WASM runtime in `pkg/wasm/`
-3. Simplify `universal_impl.go` / `factory.go` — compile-time backend selection
-4. Create `cmd/build/` — cross-platform build tool
-5. Create `docker/Dockerfile.linux-build` — CentOS 7 build environment
-6. Build and commit pre-compiled libraries to `lib/`
-7. Delete old build scripts
-8. Update README.md
-9. Update tests
-10. Verify: `CGO_ENABLED=1 go build` and `CGO_ENABLED=0 go build` both work
+1. **PoC validation** (before bulk changes):
+   - Verify wazero can load `zxingwrapper.wasm` and decode a QR Code on Linux with `CGO_ENABLED=0`
+   - Verify Windows CGO can link MinGW-w64 compiled static libraries
+2. Restructure `pkg/zxing/` — split CGO bindings by platform, add build tags
+3. Implement wazero WASM runtime in `pkg/wasm/`
+4. Simplify `universal_impl.go` / `factory.go` — compile-time backend selection
+5. Create `cmd/build/` — cross-platform build tool (with unit tests for platform detection logic)
+6. Create `docker/Dockerfile.linux-build` — CentOS 7 + Vault mirror
+7. Build and commit pre-compiled libraries to `lib/` with `BUILDINFO.md`
+8. Delete old build scripts
+9. Update README.md (including Windows MinGW-w64 prerequisite)
+10. Update tests
+11. Verify: `CGO_ENABLED=1 go build` and `CGO_ENABLED=0 go build` both work
