@@ -65,6 +65,10 @@ void free_results(DecodeResult** results, int count);
 // 获取错误信息
 const char* get_last_error();
 
+// Decode barcode from raw image file data (PNG/JPEG/BMP etc.)
+// Used by wazero runtime which cannot access filesystem
+DecodeResult* decode_barcode_data(const unsigned char* file_data, int file_size, const DecodeOptions* options);
+
 #ifdef __cplusplus
 }
 #endif

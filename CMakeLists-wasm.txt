@@ -13,17 +13,26 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+# WASM 平台不支持动态链接，强制使用静态库
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build and link as shared library" FORCE)
+
+# 禁用 ZXingCPP 的示例、测试和 Python 绑定，避免不必要的依赖（如 stb, Qt, OpenCV）
+set(ZXING_EXAMPLES OFF CACHE BOOL "Build the example barcode reader/writer applications" FORCE)
+set(ZXING_BLACKBOX_TESTS OFF CACHE BOOL "Build the black box reader/writer tests" FORCE)
+set(ZXING_UNIT_TESTS OFF CACHE BOOL "Build the unit tests" FORCE)
+set(ZXING_INSTALL_TEST OFF CACHE BOOL "Test if the installed/public API works" FORCE)
+set(ZXING_PYTHON_MODULE OFF CACHE BOOL "Build the python module" FORCE)
+
 # Emscripten特定设置
+# STANDALONE_WASM=1 produces a WASM that doesn't depend on Emscripten JS runtime
+# This allows wazero (pure Go WASM runtime) to load and execute the module
 set(EMSCRIPTEN_LINK_FLAGS
     -s WASM=1
-    -s EXPORTED_FUNCTIONS='["_malloc","_free","_decode_barcode","_decode_barcodes","_free_result","_free_results","_get_last_error"]'
-    -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]'
+    -s STANDALONE_WASM=1
+    -s EXPORTED_FUNCTIONS='["_malloc","_free","_create_default_options","_free_options","_decode_barcode","_decode_barcode_data","_decode_barcodes","_decode_result_get","_free_result","_free_results","_get_last_error"]'
     -s ALLOW_MEMORY_GROWTH=1
-    -s MODULARIZE=1
-    -s EXPORT_NAME=ZXingWASM
-    -s USE_ES6_IMPORT_META=0
-    -s ENVIRONMENT=web,node
     -O3
+    -Wl,--no-entry
 )
 
 # 添加ZXingCPP子目录
@@ -56,7 +65,7 @@ target_link_libraries(zxingwrapper
 # 设置Emscripten链接标志
 set_target_properties(zxingwrapper PROPERTIES
     LINK_FLAGS "${EMSCRIPTEN_LINK_FLAGS}"
-    SUFFIX ".js"
+    SUFFIX ".wasm"
 )
 
 # 安装规则

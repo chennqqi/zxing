@@ -1,5 +1,4 @@
-//go:build !js
-// +build !js
+//go:build cgo && (linux || windows) && !(js && wasm)
 
 package wasm
 

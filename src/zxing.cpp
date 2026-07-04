@@ -291,3 +291,63 @@ EXPORT void free_results(DecodeResult** results, int count) {
 EXPORT const char* get_last_error() {
     return last_error;
 }
+
+// Decode barcode from raw image file data (PNG/JPEG/BMP etc.)
+// Used by wazero runtime which cannot access filesystem
+EXPORT DecodeResult* decode_barcode_data(const unsigned char* file_data, int file_size, const DecodeOptions* options) {
+    if (!file_data || file_size <= 0) {
+        set_error("Invalid image data");
+        return nullptr;
+    }
+
+    // Load image from memory using stb_image
+    int width, height, channels;
+    unsigned char* img_data = stbi_load_from_memory(file_data, file_size, &width, &height, &channels, 1);
+    if (!img_data) {
+        set_error("Failed to load image from data: %s", stbi_failure_reason());
+        return nullptr;
+    }
+
+    // Create ImageView (grayscale)
+    ImageView view(img_data, width, height, ImageFormat::Lum);
+
+    // Configure reader options
+    ReaderOptions reader_opts;
+    if (options) {
+        reader_opts.setTryHarder(options->try_harder != 0);
+        reader_opts.setTryRotate(options->try_rotate != 0);
+    }
+
+    // Decode
+    Results results = ReadBarcodes(view, reader_opts);
+
+    stbi_image_free(img_data);
+
+    if (results.empty()) {
+        set_error("No barcodes found");
+        return nullptr;
+    }
+
+    // Return first result
+    const Result& first = results.front();
+    DecodeResult* result = (DecodeResult*)malloc(sizeof(DecodeResult));
+    if (!result) {
+        set_error("Failed to allocate result");
+        return nullptr;
+    }
+
+    std::string text = first.text();
+    result->text = (char*)malloc(text.size() + 1);
+    if (result->text) {
+        strcpy(result->text, text.c_str());
+    }
+    result->format = convert_format(first.format());
+    result->confidence = 1.0f;
+
+    return result;
+}
+
+// Empty main function required by Emscripten STANDALONE_WASM linker
+int main() {
+    return 0;
+}
