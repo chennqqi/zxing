@@ -58,6 +58,7 @@ func TestBackendSelection(t *testing.T) {
 func TestDecodeQRCodeImage(t *testing.T) {
 	config := DefaultConfig()
 	config.Backend = BackendAuto
+	config.WASMPath = "../../wasm/zxingwrapper.wasm"
 
 	zx, err := New(config)
 	if err != nil {

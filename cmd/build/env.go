@@ -78,9 +78,18 @@ func buildCGOEnv() ([]string, error) {
 	}
 
 	env := make([]string, 0, len(os.Environ())+4)
-	env = append(env, os.Environ()...)
+	for _, e := range os.Environ() {
+		// Skip existing CGO_ variables to avoid duplicates
+		if strings.HasPrefix(e, "CGO_ENABLED=") ||
+			strings.HasPrefix(e, "CGO_CFLAGS=") ||
+			strings.HasPrefix(e, "CGO_CXXFLAGS=") ||
+			strings.HasPrefix(e, "CGO_LDFLAGS=") {
+			continue
+		}
+		env = append(env, e)
+	}
 
-	// Override CGO-related variables
+	// Add CGO-related variables
 	env = append(env,
 		"CGO_ENABLED=1",
 		fmt.Sprintf("CGO_CFLAGS=%s", cflags),
@@ -94,7 +103,11 @@ func buildCGOEnv() ([]string, error) {
 // buildNonCGOEnv returns environment variables for non-CGO builds.
 func buildNonCGOEnv() []string {
 	env := make([]string, 0, len(os.Environ())+1)
-	env = append(env, os.Environ()...)
+	for _, e := range os.Environ() {
+		if !strings.HasPrefix(e, "CGO_ENABLED=") {
+			env = append(env, e)
+		}
+	}
 	env = append(env, "CGO_ENABLED=0")
 	return env
 }
