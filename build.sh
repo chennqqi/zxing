@@ -12,57 +12,13 @@ if ! command -v go &> /dev/null; then
     exit 1
 fi
 
-# 检查是否需要强制源码安装 ZXing
-force_src=${ZXING_INSTALL:-0}
-
-# 检查系统是否已安装 ZXing（通过 pkg-config）
-pkg-config --exists zxing
-has_zxing=$?
-
-# 检查系统ZXing版本
-zxing_ver=""
-if [ $has_zxing -eq 0 ]; then
-    zxing_ver=$(pkg-config --modversion zxing)
-    # 版本号小于2.0.0则强制源码
-    if [ "$(echo -e "$zxing_ver\n2.0.0" | sort -V | head -n1)" = "$zxing_ver" ] && [ "$zxing_ver" != "2.0.0" ]; then
-        echo "[build.sh] ZXing version $zxing_ver is too old, will build from source."
-        has_zxing=1
+    # Initialize zxing-cpp submodule
+    echo "Initializing zxing-cpp submodule..."
+    if [ -n "$GIT_PROXY" ]; then
+        https_proxy="$GIT_PROXY" git submodule update --init --recursive
+    else
+        git submodule update --init --recursive
     fi
-fi
-
-if [ "$force_src" = "1" ] || [ $has_zxing -ne 0 ]; then
-    echo "[build.sh] ZXing not found or forced to build from source, building from source..."
-    if [ ! -d "zxing-cpp" ]; then
-        if [ -n "$GIT_PROXY" ]; then
-            echo "[build.sh] Using proxy $GIT_PROXY for git clone"
-            https_proxy="$GIT_PROXY" git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
-        else
-            git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
-        fi
-    fi
-    cd zxing-cpp
-    mkdir -p build && cd build
-    cmake -S .. -B . -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIB=ON
-    if [ $? -ne 0 ]; then
-        echo "Error: ZXing CMake configuration failed"
-        exit 1
-    fi
-    cmake --build . --config Release -j$(nproc)
-    if [ $? -ne 0 ]; then
-        echo "Error: ZXing build failed"
-        exit 1
-    fi
-    sudo cmake --install . --config Release
-    if [ $? -ne 0 ]; then
-        echo "Error: ZXing installation failed"
-        exit 1
-    fi
-    sudo ldconfig
-    cd ../..
-    echo "ZXing library installed successfully"
-else
-    echo "[build.sh] ZXing found in system, will use system package."
-fi
 
 # 创建构建目录
 mkdir -p build
@@ -70,7 +26,7 @@ cd build
 
 # 配置 CMake
 echo "Configuring CMake..."
-cmake .. -DCMAKE_INSTALL_PREFIX=.. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_INSTALL_PREFIX=.. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=OFF
 if [ $? -ne 0 ]; then
     echo "Error: CMake configuration failed"
     exit 1
@@ -92,7 +48,23 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Copy ZXing static library manually since it's not installed by default
+if [ -f "zxing-cpp/core/libZXing.a" ]; then
+    cp zxing-cpp/core/libZXing.a ../lib/
+    echo "Copied libZXing.a to lib/"
+fi
+
 cd ..
+
+# 设置 CGO 环境变量
+export CGO_CFLAGS="-I$(pwd)/include -I$(pwd)/zxing-cpp/core/src"
+export CGO_CXXFLAGS="-std=c++17 -I$(pwd)/include -I$(pwd)/zxing-cpp/core/src"
+export CGO_LDFLAGS="-L$(pwd)/lib -lzxingwrapper -lZXing -lstdc++ -lm"
+
+# 检查 include 目录内容
+echo "Checking include directory:"
+ls -l include/zxing.h
+ls -l include/ZXing/
 
 echo "Building Go CLI..."
 go build -o bin/zxing-cli ./cmd/zxing-cli/

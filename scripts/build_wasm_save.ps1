@@ -36,14 +36,12 @@ if (-not (Get-Command emcc -ErrorAction SilentlyContinue)) {
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-# 检查并下载ZXingCPP源码
-if (-not (Test-Path "zxing-cpp")) {
-    Write-Host "Downloading ZXingCPP source code..." -ForegroundColor Cyan
-    git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: Failed to clone ZXingCPP repository" -ForegroundColor Red
-        exit 1
-    }
+# Initialize zxing-cpp submodule
+Write-Host "Initializing zxing-cpp submodule..." -ForegroundColor Cyan
+git submodule update --init --recursive
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Error: Failed to initialize zxing-cpp submodule" -ForegroundColor Red
+    exit 1
 }
 
 # 创建构建目录
@@ -70,6 +68,13 @@ try {
         "-G", "MinGW Makefiles",
         "-DCMAKE_BUILD_TYPE=$BuildType",
         "-DCMAKE_TOOLCHAIN_FILE=$toolchainFile",
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DZXING_EXAMPLES=OFF",
+        "-DZXING_BLACKBOX_TESTS=OFF",
+        "-DZXING_UNIT_TESTS=OFF",
+        "-DZXING_INSTALL_TEST=OFF",
+        "-DZXING_PYTHON_MODULE=OFF",
+        "-Wno-dev",
         ".."
     )
     

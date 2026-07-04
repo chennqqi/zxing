@@ -149,3 +149,12 @@
   1. 提供更详细的错误信息
   2. 添加图片格式验证，提前过滤无效文件
   3. 在非浏览器环境中运行 WASM 需要额外的运行时支持（如 wasmtime-go），当前在非 WASM 环境中会返回错误
+
+### 2026年7月4日分析：将 zxing-cpp 改为 git submodule
+- **现状**：`zxing-cpp/` 目录是一个完整的 git clone（v2.3.0），被 `.gitignore` 忽略，多个构建脚本中手动 `git clone` 下载源码
+- **问题**：源码未纳入版本管理，clone 逻辑分散在多个脚本中，且无法保证版本一致性
+- **方案**：
+  1. 从 `.gitignore` 移除 `zxing-cpp`
+  2. 删除现有目录，使用 `git submodule add` 添加为子模块，固定 v2.3.0
+  3. 更新所有构建脚本，用 `git submodule update --init --recursive` 替代手动 clone
+  4. CMakeLists.txt、cgo flags 中已有 `zxing-cpp/` 路径引用，无需修改

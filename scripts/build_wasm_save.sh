@@ -34,19 +34,16 @@ fi
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# 检查并下载ZXingCPP源码
-if [ ! -d "zxing-cpp" ]; then
-    echo "Downloading ZXingCPP source code..."
-    if [ -n "$GIT_PROXY" ]; then
-        echo "Using proxy $GIT_PROXY for git clone"
-        https_proxy="$GIT_PROXY" git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
-    else
-        git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
-    fi
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to clone ZXingCPP repository"
-        exit 1
-    fi
+# Initialize zxing-cpp submodule
+echo "Initializing zxing-cpp submodule..."
+if [ -n "$GIT_PROXY" ]; then
+    https_proxy="$GIT_PROXY" git submodule update --init --recursive
+else
+    git submodule update --init --recursive
+fi
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to initialize zxing-cpp submodule"
+    exit 1
 fi
 
 # 创建构建目录
@@ -73,7 +70,14 @@ cp "../CMakeLists-wasm.txt" "../CMakeLists.txt"
 
 cmake .. \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-    -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE"
+    -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DZXING_EXAMPLES=OFF \
+    -DZXING_BLACKBOX_TESTS=OFF \
+    -DZXING_UNIT_TESTS=OFF \
+    -DZXING_INSTALL_TEST=OFF \
+    -DZXING_PYTHON_MODULE=OFF \
+    -Wno-dev
 
 if [ $? -ne 0 ]; then
     echo "Error: CMake configuration failed"

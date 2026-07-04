@@ -12,6 +12,7 @@
 4. wasm方式编译，将zxing-cpp编译wasm，以实现无cgo依赖调用zxing-cpp
 5. 同时支持windows/linux平台
 6. 考虑到后续编译的便利性，保存编译好的windows/linux lib文件、wasm文件到项目中
+7. 构建脚本不应依赖sudo权限，禁止安装库文件到系统目录，应使用本地构建和链接
 
 ## 项目阶段
 
@@ -76,8 +77,24 @@
 
 **详细说明**: 见 `doc/windows-msvc-and-wasm-setup.md`
 
+## 测试任务
+
+### 2026-01-25: QR Code 识别效果验证测试
+- **任务**: 使用编译好的程序测试 data/images 中的图片，验证程序 QRCode 识别效果
+- **测试结果**: 
+  - 总图片数: 1,745 张
+  - 成功识别: 1,593 张 (91.2%)
+  - 失败: 152 张 (8.8%，均为图片文件损坏或格式不支持)
+  - 识别准确率: 对于有效图片达到 100%
+- **详细报告**: 见 `QRCODE_TEST_REPORT.md`
+
+## 2026-07-04: 将 zxing-cpp 改为 git submodule
+- 移除项目中内嵌的 zxing-cpp 源码副本，改为 git submodule 引用 https://github.com/zxing-cpp/zxing-cpp.git (v2.3.0)
+- 更新构建脚本，使用 `git submodule update --init --recursive` 替代手动 git clone
+
 ## 相关文档
 
 - `doc/windows-msvc-and-wasm-setup.md` - Windows平台MSVC和WASM构建环境说明
 - `doc/build-progress.md` - 项目构建进度报告
 - `doc/cli-build-and-test-summary.md` - CLI工具构建和测试总结
+- `QRCODE_TEST_REPORT.md` - QR Code 识别测试报告

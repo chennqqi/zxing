@@ -44,9 +44,12 @@
 ## 快速开始
 
 ```bash
-# 克隆项目
-git clone https://github.com/chennqqi/zxing.git
+# 克隆项目（包含子模块）
+git clone --recursive https://github.com/chennqqi/zxing.git
 cd zxing
+
+# 如果已经克隆过，初始化子模块
+git submodule update --init --recursive
 
 # 构建项目
 go build ./pkg/zxing/
@@ -328,8 +331,9 @@ go test -cover ./pkg/zxing/
 ### 开发环境设置
 
 ```bash
-git clone https://github.com/chennqqi/zxing.git
+git clone --recursive https://github.com/chennqqi/zxing.git
 cd zxing
+git submodule update --init --recursive
 go mod tidy
 go test ./...
 ```

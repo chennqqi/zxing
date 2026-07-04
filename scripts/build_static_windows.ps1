@@ -31,14 +31,12 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-# 检查并下载ZXingCPP源码
-if (-not (Test-Path "zxing-cpp")) {
-    Write-Host "Downloading ZXingCPP source code..." -ForegroundColor Cyan
-    git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: Failed to clone ZXingCPP repository" -ForegroundColor Red
-        exit 1
-    }
+# Initialize zxing-cpp submodule
+Write-Host "Initializing zxing-cpp submodule..." -ForegroundColor Cyan
+git submodule update --init --recursive
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Error: Failed to initialize zxing-cpp submodule" -ForegroundColor Red
+    exit 1
 }
 
 # 创建构建目录
