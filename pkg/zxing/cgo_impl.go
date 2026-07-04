@@ -14,6 +14,10 @@ import (
 	"os"
 )
 
+// cgoAvailable indicates that CGO is enabled on this platform.
+// Used by factory.go for compile-time backend selection.
+const cgoAvailable = true
+
 // cgoZXing implements the ZXing interface using CGO.
 type cgoZXing struct {
 	config *Config

@@ -2,7 +2,6 @@ package zxing
 
 import (
 	"fmt"
-	"runtime"
 )
 
 // New creates a new ZXing instance with the given configuration.
@@ -44,24 +43,12 @@ func NewWASM(config *Config) (ZXing, error) {
 	return &wasmZXing{config: config}, nil
 }
 
-// newAuto selects the backend at compile time based on build tags.
-// On CGO-enabled linux/windows, CGO is preferred.
-// On all other platforms, WASM (wazero) is used.
+// newAuto selects the backend at compile time based on the cgoAvailable constant.
+// cgoAvailable is true when CGO is enabled on linux/windows (see cgo_impl.go),
+// and false otherwise (see cgo_stub.go).
 func newAuto(config *Config) (ZXing, error) {
-	// Compile-time backend selection via build tags:
-	// - cgo_impl.go has build tag "cgo && (linux || windows)"
-	// - wasm_impl.go has build tag "!cgo || !(linux || windows)"
-	// At runtime, check which backend is actually available
-	if runtime.GOOS == "linux" || runtime.GOOS == "windows" {
-		// On linux/windows, try CGO first (it may or may not be enabled)
-		// The stub will return an error if CGO is not available
-		zx, err := NewCGO(config)
-		if err == nil {
-			return zx, nil
-		}
-		if config.Debug {
-			fmt.Printf("CGO backend not available (%v), falling back to WASM\n", err)
-		}
+	if cgoAvailable {
+		return NewCGO(config)
 	}
 	return NewWASM(config)
 }

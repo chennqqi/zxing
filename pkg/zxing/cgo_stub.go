@@ -11,6 +11,10 @@ import (
 	"image"
 )
 
+// cgoAvailable indicates that CGO is not enabled on this platform.
+// Used by factory.go for compile-time backend selection.
+const cgoAvailable = false
+
 // BarcodeFormat represents the barcode format type (stub values for non-CGO builds).
 type BarcodeFormat int
 
