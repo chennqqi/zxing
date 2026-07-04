@@ -348,9 +348,12 @@ EXPORT DecodeResult* decode_barcode_data(const unsigned char* file_data, int fil
 }
 
 // Empty main function required by Emscripten STANDALONE_WASM linker
+// Only include for WASM builds to avoid symbol conflict with CGO
+#ifdef __EMSCRIPTEN__
 int main() {
     return 0;
 }
+#endif
 
 // Wrapper functions for memory management (exported for wazero)
 // Emscripten STANDALONE_WASM may inline malloc/free, so we provide explicit wrappers
