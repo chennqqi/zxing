@@ -31,6 +31,9 @@ go.work.sum
 # .idea/
 # .vscode/
 /build
+/build-wasm
+/bin
+/.windsurf
 
 images/
 tests
@@ -42,3 +45,9 @@ lib64
 tests.zip
 qrcode_image.zip
 test_report.txt
+
+# Build artifacts in lib/ root (precompiled libs are in lib/{os}-{arch}/)
+/lib/libZXing.a
+/lib/libzxingwrapper.a
+/lib/cmake/
+/lib/pkgconfig/

@@ -14,10 +14,15 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # 添加ZXingCPP子目录，确保ZXingCPP也编译为静态库
 if(BUILD_STATIC_LIB)
-    set(BUILD_SHARED_LIB_ZXING OFF CACHE BOOL "Build ZXingCPP as static library" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build ZXingCPP as static library" FORCE)
 else()
-    set(BUILD_SHARED_LIB_ZXING ON CACHE BOOL "Build ZXingCPP as shared library" FORCE)
+    set(BUILD_SHARED_LIBS ON CACHE BOOL "Build ZXingCPP as shared library" FORCE)
 endif()
+
+# Disable ZXing examples and tests (ZXingWriter.cpp requires C++17 CTAD, not supported by GCC 7)
+set(ZXING_EXAMPLES OFF CACHE BOOL "Build examples" FORCE)
+set(ZXING_BLACKBOX_TESTS OFF CACHE BOOL "Build blackbox tests" FORCE)
+set(ZXING_UNIT_TESTS OFF CACHE BOOL "Build unit tests" FORCE)
 
 # 添加ZXingCPP子目录
 add_subdirectory(zxing-cpp)
