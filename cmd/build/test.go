@@ -7,15 +7,19 @@ import (
 )
 
 // runTest runs Go tests with CGO environment if available.
+// Respects CGO_ENABLED env var: "0" forces non-CGO, "1" forces CGO,
+// unset auto-detects based on precompiled library availability.
 func runTest(args []string) error {
-	env, err := buildCGOEnv()
+	env, msg, err := selectBuildEnv()
 	if err != nil {
-		fmt.Printf("Warning: CGO env setup failed (%v), using non-CGO build\n", err)
-		env = buildNonCGOEnv()
+		return err
 	}
+	fmt.Printf("Test backend: %s\n", msg)
 
 	fmt.Println("Running tests...")
-	cmd := exec.Command("go", "test", "./pkg/...", "-v")
+	testArgs := append([]string{"test"}, args...)
+	testArgs = append(testArgs, "./pkg/...", "-v")
+	cmd := exec.Command("go", testArgs...)
 	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

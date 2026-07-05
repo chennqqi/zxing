@@ -12,17 +12,23 @@ Usage: go run ./cmd/build <command> [args]
 Commands:
   build-lib      Build C++ static libraries via CMake
   build-wasm     Build WASM module via Emscripten
-  build-go       Build Go packages (with CGO if available)
-  build-all      Build everything (lib + wasm + go)
+  build-go       Build Go packages (auto-detects CGO or non-CGO)
+  build-all      Build everything (lib + wasm + go, skips missing deps)
   sync-headers   Sync ZXing-CPP headers to include/ZXing/
-  test           Run Go tests
+  test           Run Go tests (auto-detects CGO or non-CGO)
   clean          Remove build artifacts (build/ and build-wasm/)
   docker-build   Build Linux static library in CentOS 7 Docker container
 
+Environment:
+  CGO_ENABLED=0  Force non-CGO (WASM) backend
+  CGO_ENABLED=1  Force CGO backend (requires precompiled libraries)
+  (unset)        Auto-detect: CGO if libs exist, otherwise non-CGO
+
 Examples:
   go run ./cmd/build build-go
-  go run ./cmd/build build-wasm
-  go run ./cmd/build test
+  go run ./cmd/build build-go -v
+  CGO_ENABLED=0 go run ./cmd/build test
+  go run ./cmd/build build-all
 `
 
 func main() {

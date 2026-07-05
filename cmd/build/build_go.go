@@ -4,18 +4,23 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 )
 
 // buildGo builds Go packages with CGO environment if available.
+// Respects CGO_ENABLED env var: "0" forces non-CGO, "1" forces CGO,
+// unset auto-detects based on precompiled library availability.
 func buildGo(args []string) error {
-	env, err := buildCGOEnv()
+	env, msg, err := selectBuildEnv()
 	if err != nil {
-		fmt.Printf("Warning: CGO env setup failed (%v), using non-CGO build\n", err)
-		env = buildNonCGOEnv()
+		return err
 	}
+	fmt.Printf("Build backend: %s\n", msg)
 
 	fmt.Println("Building Go packages...")
-	cmd := exec.Command("go", "build", "./...")
+	buildArgs := append([]string{"build"}, args...)
+	buildArgs = append(buildArgs, "./...")
+	cmd := exec.Command("go", buildArgs...)
 	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -23,9 +28,13 @@ func buildGo(args []string) error {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
-	// Also build the CLI
+	// Also build the CLI as a deliverable
 	fmt.Println("Building zxing-cli...")
-	cmd = exec.Command("go", "build", "-o", "bin/zxing-cli", "./cmd/zxing-cli")
+	outputPath := "bin/zxing-cli"
+	if runtime.GOOS == "windows" {
+		outputPath += ".exe"
+	}
+	cmd = exec.Command("go", "build", "-o", outputPath, "./cmd/zxing-cli")
 	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -38,12 +47,14 @@ func buildGo(args []string) error {
 }
 
 // buildAll builds everything: C++ libraries, WASM module, and Go packages.
+// Missing build dependencies (CMake, EMSDK) produce a warning and skip that step
+// rather than failing the entire build.
 func buildAll(args []string) error {
 	if err := buildLib(args); err != nil {
-		return fmt.Errorf("build-lib failed: %w", err)
+		fmt.Printf("Warning: build-lib skipped (%v)\n", err)
 	}
 	if err := buildWasm(args); err != nil {
-		return fmt.Errorf("build-wasm failed: %w", err)
+		fmt.Printf("Warning: build-wasm skipped (%v)\n", err)
 	}
 	if err := buildGo(args); err != nil {
 		return fmt.Errorf("build-go failed: %w", err)

@@ -133,3 +133,65 @@ func envGet(env []string, key string) string {
 	}
 	return ""
 }
+
+// hasPrebuiltLibs checks whether precompiled static libraries exist for the
+// current platform. Returns true if both libZXing and libzxingwrapper are found.
+func hasPrebuiltLibs() bool {
+	dir := libDir()
+	abs := absPath(dir)
+
+	// Check for .a (Linux/macOS) or .lib (Windows) static libraries
+	var libExt string
+	if runtime.GOOS == "windows" {
+		libExt = ".lib"
+	} else {
+		libExt = ".a"
+	}
+
+	zxing := filepath.Join(abs, "libZXing"+libExt)
+	wrapper := filepath.Join(abs, "libzxingwrapper"+libExt)
+
+	if _, err := os.Stat(zxing); err != nil {
+		return false
+	}
+	if _, err := os.Stat(wrapper); err != nil {
+		return false
+	}
+	return true
+}
+
+// selectBuildEnv determines the build environment based on user preference and
+// library availability. It respects the CGO_ENABLED environment variable:
+//   - "0": force non-CGO (WASM backend)
+//   - "1": force CGO, returns error if precompiled libs are missing
+//   - unset: auto-detect — use CGO if libs exist, otherwise non-CGO
+//
+// Returns the environment slice and a descriptive message indicating which
+// backend was selected.
+func selectBuildEnv() (env []string, msg string, err error) {
+	userPref := os.Getenv("CGO_ENABLED")
+
+	switch userPref {
+	case "0":
+		return buildNonCGOEnv(), "non-CGO (CGO_ENABLED=0 by user)", nil
+	case "1":
+		if !hasPrebuiltLibs() {
+			return nil, "", fmt.Errorf("CGO_ENABLED=1 but precompiled libraries not found in %s", libDir())
+		}
+		cgoEnv, e := buildCGOEnv()
+		if e != nil {
+			return nil, "", fmt.Errorf("CGO env setup failed: %w", e)
+		}
+		return cgoEnv, "CGO (CGO_ENABLED=1 by user)", nil
+	default:
+		// Auto-detect
+		if hasPrebuiltLibs() {
+			cgoEnv, e := buildCGOEnv()
+			if e != nil {
+				return buildNonCGOEnv(), "non-CGO (CGO env setup failed, falling back)", nil
+			}
+			return cgoEnv, "CGO (auto-detected precompiled libraries)", nil
+		}
+		return buildNonCGOEnv(), "non-CGO (no precompiled libraries found)", nil
+	}
+}
