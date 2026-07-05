@@ -12,14 +12,20 @@ import (
 // It checks for EMSDK, backs up CMakeLists.txt, uses CMakeLists-wasm.txt,
 // runs emcmake + emmake, copies artifacts to wasm/, and restores CMakeLists.txt.
 func buildWasm(args []string) error {
+	// Check build dependencies before starting
+	if os.Getenv("EMSDK") == "" {
+		return errMissingDep{tool: "EMSDK environment variable"}
+	}
+	if _, err := exec.LookPath("emcmake"); err != nil {
+		return errMissingDep{tool: "emcmake"}
+	}
+	if _, err := exec.LookPath("emmake"); err != nil {
+		return errMissingDep{tool: "emmake"}
+	}
+
 	root, err := projectRoot()
 	if err != nil {
 		return err
-	}
-
-	// Check EMSDK environment
-	if os.Getenv("EMSDK") == "" {
-		return fmt.Errorf("EMSDK environment variable not set; please source emsdk_env.sh first")
 	}
 
 	// Backup CMakeLists.txt

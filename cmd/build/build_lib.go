@@ -11,6 +11,18 @@ import (
 // buildLib builds C++ static libraries via CMake.
 // It runs git submodule update, cmake, and make, then copies artifacts to lib/{os}-{arch}/.
 func buildLib(args []string) error {
+	// Check build dependencies before starting
+	if _, err := exec.LookPath("cmake"); err != nil {
+		return errMissingDep{tool: "cmake"}
+	}
+	makeCmd := "make"
+	if runtime.GOOS == "windows" {
+		makeCmd = "mingw32-make"
+	}
+	if _, err := exec.LookPath(makeCmd); err != nil {
+		return errMissingDep{tool: makeCmd}
+	}
+
 	root, err := projectRoot()
 	if err != nil {
 		return err
@@ -49,10 +61,6 @@ func buildLib(args []string) error {
 
 	// Step 4: Run make
 	fmt.Println("Building...")
-	makeCmd := "make"
-	if runtime.GOOS == "windows" {
-		makeCmd = "mingw32-make"
-	}
 	cmd = exec.Command(makeCmd, "-j", fmt.Sprintf("%d", runtime.NumCPU()))
 	cmd.Dir = buildDir
 	cmd.Stdout = os.Stdout
