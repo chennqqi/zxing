@@ -1,223 +1,124 @@
-name: Build and Release
+name: Build and Test
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest, rocky-9]
-        go-version: [1.19.x]
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ matrix.go-version }}
-
-    - name: Install dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
-      timeout-minutes: 15
-      run: |
-        sudo apt-get clean
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends build-essential cmake python3
-        # 尝试安装系统包
-        sudo apt-get install -y libzxing-dev || true
-        # 如果系统包不存在，从源码编译
-        if ! pkg-config --exists zxing-cpp && ! pkg-config --exists zxing; then
-          git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
-          mkdir build-zxing && cd build-zxing
-          cmake -S ../zxing-cpp -B . -DCMAKE_BUILD_TYPE=Release
-          sudo cmake --build . --target install --config Release
-          sudo ldconfig
-        fi
-
-    - name: Install dependencies (Rocky Linux)
-      if: matrix.os == 'rocky-9'
-      timeout-minutes: 15
-      run: |
-        sudo dnf clean all
-        sudo dnf update -y
-        sudo dnf install -y gcc-c++ make cmake python3
-        # 尝试安装系统包
-        sudo dnf install -y zxing-cpp-devel || true
-        # 如果系统包不存在，从源码编译
-        if ! pkg-config --exists zxing-cpp && ! pkg-config --exists zxing; then
-          git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
-          mkdir build-zxing && cd build-zxing
-          cmake -S ../zxing-cpp -B . -DCMAKE_BUILD_TYPE=Release
-          sudo cmake --build . --target install --config Release
-          sudo ldconfig
-        fi
-
-    - name: Install dependencies (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        vcpkg install zxing-cpp:x64-windows
-        python -m pip install --upgrade pip
-
-    - name: Install dependencies (macOS)
-      if: matrix.os == 'macos-latest'
-      run: |
-        brew install cmake
-        brew install zxing-cpp
-        brew install python3
-
-    - name: Build
-      run: |
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          .\build.bat
-        else
-          chmod +x build.sh
-          ./build.sh
-        fi
-
-    - name: Run tests
-      run: go test -v ./...
-
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-${{ matrix.os }}
-        path: |
-          build/
-          dist/
-          scripts/
-        if-no-files-found: error
-
-    - name: Upload release asset artifact (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-asset-linux
-        path: bin/libzxing.so
-        if-no-files-found: error
-
-    - name: Upload release asset artifact (Windows)
-      if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-asset-windows
-        path: bin/zxing.dll
-        if-no-files-found: error
-
-    - name: Upload release asset artifact (macOS)
-      if: matrix.os == 'macos-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-asset-macos
-        path: bin/libzxing.dylib
-        if-no-files-found: error
-
-  package-deb:
-    needs: build
+  # Build and test with CGO backend (uses precompiled static libraries)
+  cgo-build:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: build-ubuntu-latest
-        path: .
-    
-    - name: Install packaging tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y devscripts debhelper dh-make
-    
-    - name: Setup DEB build environment
-      run: |
-        mkdir -p debian
-        cp -r build/* debian/
-    
-    - name: Create DEB package
-      run: |
-        VERSION=$(echo ${GITHUB_REF#refs/tags/v})
-        ./scripts/build_deb.sh $VERSION
-    
-    - name: Upload DEB package
-      uses: actions/upload-artifact@v4
-      with:
-        name: deb-package
-        path: dist/*.deb
-        if-no-files-found: error
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-  package-rpm:
-    needs: build
-    runs-on: rocky-9
-    if: startsWith(github.ref, 'refs/tags/')
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: build-rocky-9
-        path: .
-    
-    - name: Install packaging tools
-      run: |
-        sudo dnf update -y
-        sudo dnf install -y rpm-build rpmdevtools
-    
-    - name: Setup RPM build environment
-      run: |
-        rpmdev-setuptree
-        cp -r build/* $HOME/rpmbuild/SOURCES/
-        cp -r scripts/* $HOME/rpmbuild/SOURCES/
-    
-    - name: Create RPM package
-      run: |
-        VERSION=$(echo ${GITHUB_REF#refs/tags/v})
-        ./scripts/build_rpm.sh $VERSION
-    
-    - name: Upload RPM package
-      uses: actions/upload-artifact@v4
-      with:
-        name: rpm-package
-        path: dist/*.rpm
-        if-no-files-found: error
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
 
-  release:
-    needs: [package-deb, package-rpm, build]
+      - name: Build CGO
+        run: |
+          CGO_ENABLED=1 \
+          CGO_CFLAGS="-I$(pwd)/include" \
+          CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
+          CGO_LDFLAGS="-L$(pwd)/lib/linux-x64 -lzxingwrapper -lZXing -lstdc++ -lm" \
+          go build -buildvcs=false ./...
+
+      - name: Test CGO
+        run: |
+          CGO_ENABLED=1 \
+          CGO_CFLAGS="-I$(pwd)/include" \
+          CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
+          CGO_LDFLAGS="-L$(pwd)/lib/linux-x64 -lzxingwrapper -lZXing -lstdc++ -lm" \
+          go test -buildvcs=false -v ./pkg/zxing/...
+
+      - name: Vet
+        run: |
+          CGO_ENABLED=1 \
+          CGO_CFLAGS="-I$(pwd)/include" \
+          CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
+          CGO_LDFLAGS="-L$(pwd)/lib/linux-x64 -lzxingwrapper -lZXing -lstdc++ -lm" \
+          go vet -buildvcs=false ./...
+
+      - name: Build CLI
+        run: |
+          CGO_ENABLED=1 \
+          CGO_CFLAGS="-I$(pwd)/include" \
+          CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
+          CGO_LDFLAGS="-L$(pwd)/lib/linux-x64 -lzxingwrapper -lZXing -lstdc++ -lm" \
+          go build -buildvcs=false -o zxing-cli ./cmd/zxing-cli
+
+      - name: Test CLI
+        run: |
+          ./zxing-cli -i data/qrcode_www.bing.com.png --try-harder
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zxing-cli-linux-x64
+          path: zxing-cli
+          if-no-files-found: error
+
+  # Build and test with WASM backend (pure Go, no CGO)
+  wasm-build:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Download packages
-      uses: actions/download-artifact@v4
-      with:
-        path: dist
-    
-    - name: Prepare release assets
-      run: |
-        mkdir -p release-assets
-        find dist -type f -name "*.deb" -exec mv {} release-assets/ \;
-        find dist -type f -name "*.rpm" -exec mv {} release-assets/ \;
-        find dist -type f -name "*.so" -exec mv {} release-assets/libzxing-linux.so \;
-        find dist -type f -name "*.dll" -exec mv {} release-assets/zxing-windows.dll \;
-        find dist -type f -name "*.dylib" -exec mv {} release-assets/libzxing-darwin.dylib \;
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: release-assets/*
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build non-CGO
+        run: |
+          CGO_ENABLED=0 go build -buildvcs=false ./...
+
+      - name: Test WASM backend
+        run: |
+          CGO_ENABLED=0 go test -buildvcs=false -v ./pkg/wasm/...
+
+      - name: Test build tools
+        run: |
+          CGO_ENABLED=0 go test -buildvcs=false -v ./cmd/build/...
+
+      - name: Build CLI (WASM backend)
+        run: |
+          CGO_ENABLED=0 go build -buildvcs=false -o zxing-cli-wasm ./cmd/zxing-cli
+
+      - name: Test CLI (WASM backend)
+        run: |
+          ./zxing-cli-wasm -i data/qrcode_www.bing.com.png --try-harder --backend wasm
+
+  # Build static libraries from source (verify Docker build process)
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build Linux x64 static libraries in Docker
+        run: |
+          docker build -t zxing-linux-build -f docker/Dockerfile.linux-build docker/
+          docker run --rm -v "$PWD":/workspace:Z zxing-linux-build sh -c "
+            cd /tmp && mkdir -p build && cd build && \
+            cmake -G 'Unix Makefiles' \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_STATIC_LIB=ON \
+              -DBUILD_SHARED_LIBS=OFF \
+              /workspace && \
+            make -j\$(nproc) && \
+            cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-x64/
+          "
+
+      - name: Verify libraries
+        run: |
+          file lib/linux-x64/libZXing.a
+          file lib/linux-x64/libzxingwrapper.a
+          test -f lib/linux-x64/libZXing.a && echo "libZXing.a OK"
+          test -f lib/linux-x64/libzxingwrapper.a && echo "libzxingwrapper.a OK"

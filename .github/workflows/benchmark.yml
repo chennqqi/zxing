@@ -6,132 +6,72 @@ on:
   pull_request:
     branches: [ main ]
   schedule:
-    - cron: '0 0 * * 0'  # 每周日运行
+    - cron: '0 0 * * 0'  # Run every Sunday
 
 jobs:
   benchmark:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest, rocky-9]
-        go-version: [1.19.x]
-
+    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ matrix.go-version }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
 
-    - name: Install dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
-      timeout-minutes: 15
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential cmake
-        # 尝试安装系统包
-        sudo apt-get install -y libzxing-dev || true
-        # 如果系统包不存在，从源码编译
-        if ! pkg-config --exists zxing-cpp && ! pkg-config --exists zxing; then
-          git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
-          mkdir build && cd build
-          cmake -S .. -B . -DCMAKE_BUILD_TYPE=Release
-          cmake --build . -j$(nproc) --config Release
-          sudo make install
-          sudo ldconfig
-        fi
-        sudo apt-get install -y python3
+      - name: Build CLI (CGO backend)
+        run: |
+          CGO_ENABLED=1 \
+          CGO_CFLAGS="-I$(pwd)/include" \
+          CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
+          CGO_LDFLAGS="-L$(pwd)/lib/linux-x64 -lzxingwrapper -lZXing -lstdc++ -lm" \
+          go build -buildvcs=false -o zxing-cli ./cmd/zxing-cli
 
-    - name: Install dependencies (Windows)
-      if: matrix.os == 'windows-latest'
-      timeout-minutes: 15
-      run: |
-        vcpkg install zxing-cpp:x64-windows
-        python -m pip install --upgrade pip
+      - name: Build CLI (WASM backend)
+        run: |
+          CGO_ENABLED=0 go build -buildvcs=false -o zxing-cli-wasm ./cmd/zxing-cli
 
-    - name: Install dependencies (macOS)
-      if: matrix.os == 'macos-latest'
-      timeout-minutes: 15
-      run: |
-        brew install cmake
-        brew install zxing-cpp
-        brew install python3
+      - name: Run benchmark (CGO backend)
+        id: cgo-bench
+        run: |
+          echo "=== CGO Backend Benchmark ==="
+          START=$(date +%s%N)
+          ./zxing-cli -i data/qrcode_www.bing.com.png --try-harder
+          END=$(date +%s%N)
+          CGO_TIME=$(( (END - START) / 1000000 ))
+          echo "CGO decode time: ${CGO_TIME}ms"
+          echo "cgo_time_ms=${CGO_TIME}" >> "$GITHUB_OUTPUT"
 
-    - name: Install dependencies (Rocky Linux)
-      if: matrix.os == 'rocky-9'
-      timeout-minutes: 15
-      run: |
-        # 安装 EPEL 源
-        sudo dnf install -y epel-release
-        sudo dnf update -y
-        sudo dnf install -y gcc-c++ make cmake
-        # 尝试安装系统包
-        sudo dnf install -y zxing-cpp-devel || true
-        # 如果系统包不存在，从源码编译
-        if ! pkg-config --exists zxing-cpp && ! pkg-config --exists zxing; then
-          git clone https://github.com/zxing-cpp/zxing-cpp.git --recursive --single-branch --depth 1
-          cd zxing-cpp
-          mkdir build && cd build
-          cmake -S .. -B . -DCMAKE_BUILD_TYPE=Release
-          cmake --build . -j$(nproc) --config Release
-          sudo make install
-          sudo ldconfig
-        fi
-        sudo dnf install -y python3
+      - name: Run benchmark (WASM backend)
+        id: wasm-bench
+        run: |
+          echo "=== WASM Backend Benchmark ==="
+          START=$(date +%s%N)
+          ./zxing-cli-wasm -i data/qrcode_www.bing.com.png --try-harder --backend wasm
+          END=$(date +%s%N)
+          WASM_TIME=$(( (END - START) / 1000000 ))
+          echo "WASM decode time: ${WASM_TIME}ms"
+          echo "wasm_time_ms=${WASM_TIME}" >> "$GITHUB_OUTPUT"
 
-    - name: Build
-      timeout-minutes: 15
-      run: |
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          .\build.bat
-        else
-          chmod +x build.sh
-          ./build.sh
-        fi
+      - name: Generate benchmark report
+        run: |
+          mkdir -p benchmark_results
+          cat > benchmark_results/benchmark_report.md << 'REPORT'
+          # Benchmark Report
+          REPORT
+          echo "" >> benchmark_results/benchmark_report.md
+          echo "Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> benchmark_results/benchmark_report.md
+          echo "Platform: ubuntu-latest" >> benchmark_results/benchmark_report.md
+          echo "" >> benchmark_results/benchmark_report.md
+          echo "| Backend | Decode Time (ms) |" >> benchmark_results/benchmark_report.md
+          echo "|---------|-----------------|" >> benchmark_results/benchmark_report.md
+          echo "| CGO     | ${{ steps.cgo-bench.outputs.cgo_time_ms }} |" >> benchmark_results/benchmark_report.md
+          echo "| WASM    | ${{ steps.wasm-bench.outputs.wasm_time_ms }} |" >> benchmark_results/benchmark_report.md
 
-    - name: Run benchmarks
-      timeout-minutes: 15
-      run: |
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          .\scripts\benchmark.bat
-        else
-          chmod +x scripts/benchmark.sh
-          ./scripts/benchmark.sh
-        fi
-
-    - name: Find benchmark report
-      id: find_report
-      run: |
-        REPORT_PATH=$(find benchmark_results -name benchmark_report.md)
-        echo "path=$REPORT_PATH" >> $GITHUB_OUTPUT
-
-    - name: Upload benchmark report
-      uses: actions/upload-artifact@v4
-      with:
-        name: benchmark-report-${{ matrix.os }}
-        path: ${{ steps.find_report.outputs.path }}
-        if-no-files-found: error
-
-    - name: Download previous benchmark report
-      if: github.event_name == 'pull_request'
-      uses: dawidd6/action-download-artifact@v3
-      with:
-        workflow: benchmark.yml
-        branch: main
-        name: benchmark-report-${{ matrix.os }}
-        path: benchmark_results/previous
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        if_no_artifact_found: 'ignore'
-
-    - name: Compare with previous results
-      if: github.event_name == 'pull_request'
-      run: |
-        if [ -f "benchmark_results/previous/benchmark_report.md" ]; then
-          echo "Comparing with previous results..."
-          CURRENT_REPORT=$(find benchmark_results -name benchmark_report.md -not -path "*/previous/*")
-          echo "Current report: $CURRENT_REPORT"
-          diff "${CURRENT_REPORT}" "benchmark_results/previous/benchmark_report.md" || true
-        else
-          echo "No previous results found for comparison"
-        fi 
+      - name: Upload benchmark report
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report
+          path: benchmark_results/benchmark_report.md
+          if-no-files-found: error
