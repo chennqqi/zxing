@@ -19,12 +19,21 @@ RUN yum install -y \
         cmake3 \
         make \
         git \
+        wget \
+        tar \
     && yum clean all && \
     rm -rf /var/cache/yum
 
+# Install Go 1.24 (Go 1.21+ requires glibc 2.17, which CentOS 7 provides)
+ENV GOLANG_VERSION=1.24.11
+RUN wget -q https://mirrors.aliyun.com/golang/go${GOLANG_VERSION}.linux-amd64.tar.gz -O /tmp/go.tar.gz && \
+    tar -C /usr/local -xzf /tmp/go.tar.gz && \
+    rm /tmp/go.tar.gz
+
 # Enable devtoolset-10 by default (explicit full PATH for reliability)
-ENV PATH=/opt/rh/devtoolset-10/root/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV PATH=/usr/local/go/bin:/opt/rh/devtoolset-10/root/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ENV LD_LIBRARY_PATH=/opt/rh/devtoolset-10/root/usr/lib64:/opt/rh/devtoolset-10/root/usr/lib
+ENV GOROOT=/usr/local/go
 
 WORKDIR /workspace
 

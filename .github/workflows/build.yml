@@ -138,3 +138,58 @@ jobs:
           grep 'SHA-256' lib/linux-x64/BUILDINFO
           echo "=== Note: checksums may differ if submodule was updated ==="
           echo "=== This step verifies reproducibility of the build ==="
+
+  # Build CGO binary entirely inside CentOS 7 container for glibc 2.17 compatibility
+  docker-cgo-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build CGO binary in CentOS 7 Docker (glibc 2.17 compatible)
+        run: |
+          docker build -t zxing-linux-build -f docker/Dockerfile.linux-build docker/
+          docker run --rm -v "$PWD":/workspace:Z zxing-linux-build sh -c "
+            /tmp/patch_using_enum.sh /workspace/zxing-cpp && \
+            cd /tmp && rm -rf build && mkdir -p build && cd build && \
+            cmake3 -G 'Unix Makefiles' \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_STATIC_LIB=ON \
+              -DBUILD_SHARED_LIBS=OFF \
+              -DCMAKE_CXX_STANDARD=20 \
+              -DCMAKE_CXX_FLAGS=-fcoroutines \
+              /workspace 2>&1 | tail -3 && \
+            make -j\$(nproc) 2>&1 | tail -3 && \
+            cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-x64/ && \
+            cd /workspace && \
+            CGO_ENABLED=1 \
+            CGO_CFLAGS='-I/workspace/include' \
+            CGO_CXXFLAGS='-std=c++20 -I/workspace/include' \
+            CGO_LDFLAGS='-L/workspace/lib/linux-x64 -lzxingwrapper -lZXing -lstdc++ -lm' \
+            go build -buildvcs=false -o /tmp/zxing-cli ./cmd/zxing-cli && \
+            cp /tmp/zxing-cli /workspace/zxing-cli-glibc217 && \
+            echo '=== GLIBC requirements ===' && \
+            objdump -T /tmp/zxing-cli | grep -oP 'GLIBC_[\d.]+' | sort -V -u && \
+            echo '=== Test binary ===' && \
+            /tmp/zxing-cli -i /workspace/testdata/qrcode_test.png --try-harder
+          "
+
+      - name: Verify glibc compatibility
+        run: |
+          echo "=== GLIBC version requirements ==="
+          objdump -T zxing-cli-glibc217 | grep -oP 'GLIBC_[\d.]+' | sort -V -u
+          MAX_GLIBC=$(objdump -T zxing-cli-glibc217 | grep -oP 'GLIBC_[\d.]+' | sort -V | tail -1)
+          echo "Highest GLIBC required: $MAX_GLIBC"
+          if echo "$MAX_GLIBC" | grep -qP 'GLIBC_2\.(1[5-9]|[2-9])'; then
+            echo "ERROR: Binary requires GLIBC > 2.14, not compatible with CentOS 7"
+            exit 1
+          fi
+          echo "OK: Binary is compatible with glibc 2.14+"
+
+      - name: Upload glibc 2.17 compatible binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: zxing-cli-linux-x64-glibc217
+          path: zxing-cli-glibc217
+          if-no-files-found: error

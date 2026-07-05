@@ -51,3 +51,4 @@ test_report.txt
 /lib/libzxingwrapper.a
 /lib/cmake/
 /lib/pkgconfig/
+*.o

@@ -37,6 +37,8 @@ GCC 10 does not support two C++20 features used by zxing-cpp v3.0.2:
 
 ### Build Command
 
+**Static libraries only:**
+
 ```bash
 docker build -t zxing-linux-build -f docker/Dockerfile.linux-build docker/
 docker run --rm -v "$PWD":/workspace:Z zxing-linux-build \
@@ -46,6 +48,31 @@ docker run --rm -v "$PWD":/workspace:Z zxing-linux-build \
   -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_FLAGS=-fcoroutines /workspace && \
   make -j\$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-x64/"
 ```
+
+**Full CGO binary (static libs + Go binary, glibc 2.17 compatible):**
+
+The Docker image includes Go 1.24. The entire `go build` must run inside the container to ensure the linker uses glibc 2.17 version symbols.
+
+```bash
+docker build -t zxing-linux-build -f docker/Dockerfile.linux-build docker/
+docker run --rm -v "$PWD":/workspace:Z zxing-linux-build sh -c "
+  /tmp/patch_using_enum.sh /workspace/zxing-cpp && \
+  cd /tmp && rm -rf build && mkdir -p build && cd build && \
+  cmake3 -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF \
+  -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_FLAGS=-fcoroutines /workspace && \
+  make -j\$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-x64/ && \
+  cd /workspace && \
+  CGO_ENABLED=1 \
+  CGO_CFLAGS='-I/workspace/include' \
+  CGO_CXXFLAGS='-std=c++20 -I/workspace/include' \
+  CGO_LDFLAGS='-L/workspace/lib/linux-x64 -lzxingwrapper -lZXing -lstdc++ -lm' \
+  go build -buildvcs=false -o zxing-cli ./cmd/zxing-cli
+"
+```
+
+**Why `go build` must run inside the container:**
+
+Static libraries (.a) have no glibc version markers. But when `go build` links the final binary, the linker resolves undefined symbols against the **host system's** glibc, inheriting its version tags. Building on a host with glibc 2.39 produces a binary requiring GLIBC_2.38, even if the static libs were built on CentOS 7. Building entirely inside CentOS 7 ensures the highest GLIBC requirement is 2.14.
 
 ### Windows Cross-Compile
 

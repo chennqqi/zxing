@@ -165,6 +165,30 @@ docker run --rm -v "$PWD":/workspace:Z zxing-win-build \
 > **Linux 兼容性**: Linux 静态库在 CentOS 7 (glibc 2.17) 上编译，兼容 CentOS 7+、Ubuntu 16.04+、RHEL 7+、Debian 8+ 等所有使用 glibc 2.17+ 的发行版。
 > GCC 10 需要 patch 脚本 (`docker/patch_using_enum.sh`) 替换 `using enum` 语法和 `-fcoroutines` 标志。
 
+### 构建兼容旧系统的 CGO 二进制
+
+如果需要 CGO 二进制也兼容旧系统（glibc 2.17+），**必须在 CentOS 7 容器内完成全部构建**（包括 `go build`）：
+
+```bash
+# 在 CentOS 7 容器内完成 C++ 静态库 + Go CGO 二进制构建
+docker build -t zxing-linux-build -f docker/Dockerfile.linux-build docker/
+docker run --rm -v "$PWD":/workspace:Z zxing-linux-build sh -c "
+  /tmp/patch_using_enum.sh /workspace/zxing-cpp && \
+  cd /tmp && rm -rf build && mkdir -p build && cd build && \
+  cmake3 -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF \
+  -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_FLAGS=-fcoroutines /workspace && \
+  make -j\$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-x64/ && \
+  cd /workspace && \
+  CGO_ENABLED=1 \
+  CGO_CFLAGS='-I/workspace/include' \
+  CGO_CXXFLAGS='-std=c++20 -I/workspace/include' \
+  CGO_LDFLAGS='-L/workspace/lib/linux-x64 -lzxingwrapper -lZXing -lstdc++ -lm' \
+  go build -buildvcs=false -o zxing-cli ./cmd/zxing-cli
+"
+```
+
+> **为什么 `go build` 也要在容器内？** 静态库 (.a) 本身没有 glibc 版本标记，但 `go build` 链接最终二进制时，链接器会从宿主系统的 glibc 解析符号版本。在 glibc 2.39 的宿主上链接，即使静态库是 CentOS 7 编译的，最终二进制仍会要求 GLIBC_2.38。在 CentOS 7 内完成全部构建，最高只要求 GLIBC_2.14。
+
 ## 环境变量配置
 
 ```bash
