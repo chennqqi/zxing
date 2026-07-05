@@ -158,3 +158,12 @@
   2. 删除现有目录，使用 `git submodule add` 添加为子模块，固定 v2.3.0
   3. 更新所有构建脚本，用 `git submodule update --init --recursive` 替代手动 clone
   4. CMakeLists.txt、cgo flags 中已有 `zxing-cpp/` 路径引用，无需修改
+
+## [2026-07-05] zxing-cpp v2.3.0 -> v3.0.2 升级
+- 上游最新版本 v3.0.2 (2026-02-17), 当前 v2.3.0
+- v3.0.0 重大变更: C++20 要求, BarcodeFormats 从 bit-field 改为数组, C-API 破坏性变更
+- 适配: CMakeLists.txt C++17->C++20, Dockerfile CentOS7(GCC7)->Alpine3.18(GCC12)
+- 适配: Results->Barcodes, Result->Barcode, DataBarExpanded->DataBarExp, DataBarLimited->DataBarLtd
+- 重新构建 Linux x64 和 Windows x64 静态库
+- 识别率 89.9% (与 v2.3.0 一致, 部分测试样本 v3.0.2 原生也无法解码)
+- 增加 .github/workflows/check-upstream.yml 每周检查新版本并创建 issue 通知

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(zxing)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 选项：是否编译静态库（默认开启，符合项目需求）

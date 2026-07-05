@@ -103,3 +103,5 @@
 
 - 对 `docs/superpowers/specs/2026-07-04-production-ready-design.md` 进行设计评审
 - 评审报告保存至 `docs/superpowers/reviews/2026-07-04-production-ready-design-review.md`
+- 升级 zxing-cpp 从 v2.3.0 到 v3.0.2
+- 增加 GitHub Action 检查上游新版本并通知

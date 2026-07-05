@@ -1,0 +1,75 @@
+name: Check Upstream zxing-cpp
+
+on:
+  schedule:
+    # Run every Monday at 08:00 UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Get current submodule version
+        id: current
+        run: |
+          CURRENT_TAG=$(git -C zxing-cpp describe --tags 2>/dev/null || echo "unknown")
+          echo "current_tag=$CURRENT_TAG" >> "$GITHUB_OUTPUT"
+          echo "Current zxing-cpp version: $CURRENT_TAG"
+
+      - name: Fetch latest upstream release
+        id: latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST_TAG=$(gh release view --repo zxing-cpp/zxing-cpp --json tagName -q '.tagName' 2>/dev/null || echo "unknown")
+          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Latest zxing-cpp release: $LATEST_TAG"
+
+      - name: Compare versions and notify
+        if: steps.current.outputs.current_tag != steps.latest.outputs.latest_tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT="${{ steps.current.outputs.current_tag }}"
+          LATEST="${{ steps.latest.outputs.latest_tag }}"
+          echo "Version mismatch detected: current=$CURRENT, latest=$LATEST"
+
+          # Check if an open issue already exists for this version
+          EXISTING=$(gh issue list --state open --search "zxing-cpp $LATEST" --json number -q '.[0].number' 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING" ]; then
+            echo "Issue #$EXISTING already exists for $LATEST, skipping"
+          else
+            gh issue create \
+              --title "zxing-cpp upstream update available: $CURRENT -> $LATEST" \
+              --body "## Upstream Update Notification
+
+          A new version of [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) is available.
+
+          | Item | Value |
+          |------|-------|
+          | **Current version** | \`$CURRENT\` |
+          | **Latest version** | \`$LATEST\` |
+          | **Release notes** | https://github.com/zxing-cpp/zxing-cpp/releases/tag/$LATEST |
+
+          ### Action required
+          1. Review the release notes for breaking changes
+          2. Update the git submodule: \`git -C zxing-cpp checkout $LATEST\`
+          3. Adapt wrapper code if API changed
+          4. Rebuild static libraries for all platforms
+          5. Run tests to verify compatibility
+
+          This issue was automatically created by the \`check-upstream.yml\` GitHub Action." \
+              --label "upstream-update"
+            echo "Created issue for $LATEST"
+          fi

@@ -71,7 +71,7 @@ func buildCGOEnv() ([]string, error) {
 	libPath := filepath.Join(root, libDir())
 
 	cflags := fmt.Sprintf("-I%s", includeDir)
-	cxxflags := fmt.Sprintf("-std=c++17 -I%s", includeDir)
+	cxxflags := fmt.Sprintf("-std=c++20 -I%s", includeDir)
 	ldflags := fmt.Sprintf("-L%s -lzxingwrapper -lZXing -lstdc++", libPath)
 	if runtime.GOOS == "linux" {
 		ldflags += " -lm"

@@ -1,9 +1,10 @@
 Build: Windows x64 (MinGW-w64 cross-compile)
 Date: 2026-07-05
+zxing-cpp: v3.0.2
 Builder: Alpine 3.18 + mingw-w64-gcc 12.2.0
 Toolchain: docker/Dockerfile.win-build + docker/mingw-w64-toolchain.cmake
-CMake: -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
+CMake: -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=20
 Format: PE x86-64 (Windows static archive)
 Libraries:
-  libZXing.a - ZXing-CPP core static library (2,131,828 bytes)
-  libzxingwrapper.a - CGO wrapper static library (174,422 bytes)
+  libZXing.a - ZXing-CPP core static library (2,642,112 bytes)
+  libzxingwrapper.a - CGO wrapper static library (179,468 bytes)

@@ -5,7 +5,7 @@
 package zxing
 
 /*
-#cgo CXXFLAGS: -std=c++17
+#cgo CXXFLAGS: -std=c++20
 #cgo CFLAGS: -I${SRCDIR}/../../include
 #cgo LDFLAGS: -L${SRCDIR}/../../lib -lzxingwrapper -lZXing -lstdc++ -lm
 #include <stdlib.h>

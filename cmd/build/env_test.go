@@ -27,10 +27,10 @@ func TestBuildCGOEnv(t *testing.T) {
 		t.Errorf("CGO_CFLAGS should contain -I, got %s", cflags)
 	}
 
-	// Check CGO_CXXFLAGS contains -std=c++17
+	// Check CGO_CXXFLAGS contains -std=c++20
 	cxxflags := envGet(env, "CGO_CXXFLAGS")
-	if !strings.Contains(cxxflags, "-std=c++17") {
-		t.Errorf("CGO_CXXFLAGS should contain -std=c++17, got %s", cxxflags)
+	if !strings.Contains(cxxflags, "-std=c++20") {
+		t.Errorf("CGO_CXXFLAGS should contain -std=c++20, got %s", cxxflags)
 	}
 
 	// Check CGO_LDFLAGS contains -lzxingwrapper

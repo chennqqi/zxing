@@ -1,32 +1,15 @@
-FROM centos:7
+FROM alpine:3.18
 
-# Fix all CentOS 7 repo files to use vault.centos.org (CentOS 7 is EOL)
-# Install SCL (for devtoolset-7 GCC 7 with C++17 support)
-# Use official cmake binary instead of EPEL cmake3 (avoids slow EPEL mirrors)
-RUN sed -i 's/^mirrorlist=/#mirrorlist=/' /etc/yum.repos.d/*.repo && \
-    sed -i 's|^#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/*.repo && \
-    sed -i 's|^# baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/*.repo && \
-    yum install -y centos-release-scl && \
-    sed -i 's/^mirrorlist=/#mirrorlist=/' /etc/yum.repos.d/*.repo && \
-    sed -i 's|^#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/*.repo && \
-    sed -i 's|^# baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/*.repo && \
-    sed -i 's|^baseurl=http://buildlogs.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-SCLo*.repo && \
-    yum install -y devtoolset-7 make git wget && \
-    yum clean all && \
-    # Install cmake 3.25 from official binary release (avoid slow EPEL mirrors)
-    wget -q https://github.com/Kitware/CMake/releases/download/v3.25.3/cmake-3.25.3-linux-x86_64.tar.gz -O /tmp/cmake.tar.gz && \
-    tar xzf /tmp/cmake.tar.gz -C /opt && \
-    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/cmake /usr/local/bin/cmake && \
-    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/ctest /usr/local/bin/ctest && \
-    rm /tmp/cmake.tar.gz
-
-# Create entrypoint script to enable devtoolset-7 (podman ignores SHELL)
-RUN echo '#!/bin/bash' > /usr/local/bin/devtoolset.sh && \
-    echo 'source /opt/rh/devtoolset-7/enable' >> /usr/local/bin/devtoolset.sh && \
-    echo 'exec "$@"' >> /usr/local/bin/devtoolset.sh && \
-    chmod +x /usr/local/bin/devtoolset.sh
+# Install GCC 12 (C++20 support), cmake, make, git
+# zxing-cpp v3.0.0+ requires C++20
+RUN apk add --no-cache \
+    g++ \
+    gcc \
+    cmake \
+    make \
+    git \
+    && mkdir -p /workspace
 
 WORKDIR /workspace
 
-ENTRYPOINT ["/usr/local/bin/devtoolset.sh"]
-CMD ["bash", "-c", "cmake -G 'Unix Makefiles' -DCMAKE_BUILD_TYPE=Release . && make -j$(nproc)"]
+CMD ["sh", "-c", "cmake -G 'Unix Makefiles' -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF . && make -j$(nproc)"]

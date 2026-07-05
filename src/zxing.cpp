@@ -83,9 +83,9 @@ static ::BarcodeFormat convert_format(ZXing::BarcodeFormat format) {
         case ZXing::BarcodeFormat::PDF417: return FORMAT_PDF_417;
         case ZXing::BarcodeFormat::UPCA: return FORMAT_UPC_A;
         case ZXing::BarcodeFormat::UPCE: return FORMAT_UPC_E;
-        case ZXing::BarcodeFormat::DataBar: return FORMAT_CODABAR; // 使用Codabar作为替代
-        case ZXing::BarcodeFormat::DataBarExpanded: return FORMAT_CODABAR; // 使用Codabar作为替代
-        case ZXing::BarcodeFormat::DataBarLimited: return FORMAT_CODABAR; // 使用Codabar作为替代
+        case ZXing::BarcodeFormat::DataBar: return FORMAT_CODABAR; // Map DataBar to Codabar (no direct C equivalent)
+        case ZXing::BarcodeFormat::DataBarExp: return FORMAT_CODABAR; // Map DataBarExp to Codabar
+        case ZXing::BarcodeFormat::DataBarLtd: return FORMAT_CODABAR; // Map DataBarLtd to Codabar
         case ZXing::BarcodeFormat::MicroQRCode: return FORMAT_QR_CODE; // 使用QRCode作为替代
         case ZXing::BarcodeFormat::RMQRCode: return FORMAT_QR_CODE; // 使用QRCode作为替代
         case ZXing::BarcodeFormat::DXFilmEdge: return FORMAT_CODE_128; // 使用Code128作为替代
@@ -223,14 +223,14 @@ EXPORT DecodeResult** decode_barcodes(const char* image_path, const DecodeOption
         hints.setTryDownscale(options->try_downscale != 0);
 
         // 解码
-        auto results = ReadBarcodes(image, hints);
-        if (results.empty()) {
+        auto barcodes = ReadBarcodes(image, hints);
+        if (barcodes.empty()) {
             set_error("No barcode found");
             return nullptr;
         }
 
         // 创建结果数组
-        *count = results.size();
+        *count = static_cast<int>(barcodes.size());
         DecodeResult** decode_results = new DecodeResult*[*count];
         if (!decode_results) {
             set_error("Failed to allocate memory for results");
@@ -249,8 +249,8 @@ EXPORT DecodeResult** decode_barcodes(const char* image_path, const DecodeOption
                 return nullptr;
             }
 
-            decode_results[i]->text = strdup(results[i].text().c_str());
-            decode_results[i]->format = convert_format(results[i].format());
+            decode_results[i]->text = strdup(barcodes[i].text().c_str());
+            decode_results[i]->format = convert_format(barcodes[i].format());
             decode_results[i]->confidence = 1.0f; // 默认置信度为1.0
         }
 
@@ -319,17 +319,17 @@ EXPORT DecodeResult* decode_barcode_data(const unsigned char* file_data, int fil
     }
 
     // Decode
-    Results results = ReadBarcodes(view, reader_opts);
+    Barcodes barcodes = ReadBarcodes(view, reader_opts);
 
     stbi_image_free(img_data);
 
-    if (results.empty()) {
+    if (barcodes.empty()) {
         set_error("No barcodes found");
         return nullptr;
     }
 
     // Return first result
-    const Result& first = results.front();
+    const Barcode& first = barcodes.front();
     DecodeResult* result = (DecodeResult*)malloc(sizeof(DecodeResult));
     if (!result) {
         set_error("Failed to allocate result");
