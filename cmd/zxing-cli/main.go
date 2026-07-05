@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	_ "golang.org/x/image/bmp"
 	"github.com/chennqqi/zxing/pkg/zxing"
 )
 
@@ -252,13 +253,28 @@ func isImageExtension(ext string) bool {
 func outputTextResult(imagePath string, result *zxing.Result) {
 	fmt.Printf("📷 File: %s\n", imagePath)
 	fmt.Printf("✅ Decoded successfully!\n")
+	
+	// 显示后端信息
+	if backend, ok := result.Metadata["backend"].(string); ok {
+		fmt.Printf("   Backend: %s\n", backend)
+	}
+	
 	fmt.Printf("   Text: %s\n", result.Text)
 	fmt.Printf("   Format: %s\n", result.Format)
 	if len(result.Points) > 0 {
 		fmt.Printf("   Points: %d\n", len(result.Points))
 	}
 	if len(result.Metadata) > 0 {
-		fmt.Printf("   Metadata: %v\n", result.Metadata)
+		// 已经显示过 backend，跳过
+		otherMeta := make(map[string]interface{})
+		for k, v := range result.Metadata {
+			if k != "backend" {
+				otherMeta[k] = v
+			}
+		}
+		if len(otherMeta) > 0 {
+			fmt.Printf("   Metadata: %v\n", otherMeta)
+		}
 	}
 	fmt.Println()
 }

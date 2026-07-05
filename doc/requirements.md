@@ -98,3 +98,8 @@
 - `doc/build-progress.md` - 项目构建进度报告
 - `doc/cli-build-and-test-summary.md` - CLI工具构建和测试总结
 - `QRCODE_TEST_REPORT.md` - QR Code 识别测试报告
+
+## 2026-07-04: 评审生产就绪设计规格
+
+- 对 `docs/superpowers/specs/2026-07-04-production-ready-design.md` 进行设计评审
+- 评审报告保存至 `docs/superpowers/reviews/2026-07-04-production-ready-design-review.md`
