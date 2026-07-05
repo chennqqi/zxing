@@ -45,6 +45,10 @@ func buildLib(args []string) error {
 	}
 
 	// Step 3: Run CMake
+	// Windows uses MinGW Makefiles (not MSVC) because Go CGO on Windows
+	// natively uses MinGW toolchain, and MinGW produces .a archives that
+	// are compatible with CGO linking. MSVC would produce .lib files
+	// that are incompatible with CGO.
 	fmt.Println("Running CMake...")
 	generator := "Unix Makefiles"
 	if runtime.GOOS == "windows" {

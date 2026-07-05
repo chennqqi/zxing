@@ -1,7 +1,10 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -194,5 +197,63 @@ func TestBuildNonCGOEnvCleansAllCGOVars(t *testing.T) {
 	}
 	if envGet(env, "CGO_ENABLED") != "0" {
 		t.Errorf("CGO_ENABLED should be 0, got %s", envGet(env, "CGO_ENABLED"))
+	}
+}
+
+func TestIsDepMissingError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "errMissingDep direct",
+			err:  errMissingDep{tool: "cmake"},
+			want: true,
+		},
+		{
+			name: "errMissingDep wrapped",
+			err:  fmt.Errorf("build-lib failed: %w", errMissingDep{tool: "emcmake"}),
+			want: true,
+		},
+		{
+			name: "exec.ErrNotFound direct",
+			err:  exec.ErrNotFound,
+			want: true,
+		},
+		{
+			name: "exec.ErrNotFound wrapped",
+			err:  fmt.Errorf("command failed: %w", exec.ErrNotFound),
+			want: true,
+		},
+		{
+			name: "compile error",
+			err:  errors.New("cmake failed: compilation error"),
+			want: false,
+		},
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isDepMissingError(tt.err)
+			if got != tt.want {
+				t.Errorf("isDepMissingError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestErrMissingDepMessage(t *testing.T) {
+	e := errMissingDep{tool: "cmake"}
+	msg := e.Error()
+	if !strings.Contains(msg, "cmake") {
+		t.Errorf("Error() should contain tool name, got %s", msg)
+	}
+	if !strings.Contains(msg, "missing") {
+		t.Errorf("Error() should mention 'missing', got %s", msg)
 	}
 }
