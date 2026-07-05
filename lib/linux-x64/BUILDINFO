@@ -8,6 +8,6 @@ Patches: using enum BarcodeFormat -> static constexpr (GCC 10 compatibility)
 Format: ELF x86-64 (Linux static archive, glibc 2.17 compatible)
 Libraries:
   libZXing.a - ZXing-CPP core static library (2,905,570 bytes)
-    SHA-256: abf8596190bcd244d66da69a534204c8b6c77c941deb26116fb84ee4376089f3
+    SHA-256: 6d334368a6295ff70d0724976b2fdd48d840a61e9e7b9ae4a2b7ea806157d320
   libzxingwrapper.a - CGO wrapper static library (146,478 bytes)
-    SHA-256: 885a9109b3a944c4d2a2d27648bd4724872a65e2bc5c63f15cc9ba58f115ce86
+    SHA-256: cc416b8b058163324e1490eed3b59a2023e56fee89a499687f389ee30e7f41e7

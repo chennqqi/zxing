@@ -52,3 +52,4 @@ test_report.txt
 /lib/cmake/
 /lib/pkgconfig/
 *.o
+zxing-cli-glibc217
