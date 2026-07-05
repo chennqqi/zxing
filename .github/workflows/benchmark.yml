@@ -35,23 +35,35 @@ jobs:
       - name: Run benchmark (CGO backend)
         id: cgo-bench
         run: |
-          echo "=== CGO Backend Benchmark ==="
-          START=$(date +%s%N)
-          ./zxing-cli -i testdata/qrcode_test.png --try-harder
-          END=$(date +%s%N)
-          CGO_TIME=$(( (END - START) / 1000000 ))
-          echo "CGO decode time: ${CGO_TIME}ms"
+          echo "=== CGO Backend Benchmark (5 iterations) ==="
+          TOTAL=0
+          for i in 1 2 3 4 5; do
+            START=$(date +%s%N)
+            ./zxing-cli -i testdata/qrcode_test.png --try-harder
+            END=$(date +%s%N)
+            ITER_TIME=$(( (END - START) / 1000000 ))
+            echo "  Iteration $i: ${ITER_TIME}ms"
+            TOTAL=$((TOTAL + ITER_TIME))
+          done
+          CGO_TIME=$((TOTAL / 5))
+          echo "CGO average decode time: ${CGO_TIME}ms"
           echo "cgo_time_ms=${CGO_TIME}" >> "$GITHUB_OUTPUT"
 
       - name: Run benchmark (WASM backend)
         id: wasm-bench
         run: |
-          echo "=== WASM Backend Benchmark ==="
-          START=$(date +%s%N)
-          ./zxing-cli-wasm -i testdata/qrcode_test.png --try-harder --backend wasm
-          END=$(date +%s%N)
-          WASM_TIME=$(( (END - START) / 1000000 ))
-          echo "WASM decode time: ${WASM_TIME}ms"
+          echo "=== WASM Backend Benchmark (5 iterations) ==="
+          TOTAL=0
+          for i in 1 2 3 4 5; do
+            START=$(date +%s%N)
+            ./zxing-cli-wasm -i testdata/qrcode_test.png --try-harder --backend wasm
+            END=$(date +%s%N)
+            ITER_TIME=$(( (END - START) / 1000000 ))
+            echo "  Iteration $i: ${ITER_TIME}ms"
+            TOTAL=$((TOTAL + ITER_TIME))
+          done
+          WASM_TIME=$((TOTAL / 5))
+          echo "WASM average decode time: ${WASM_TIME}ms"
           echo "wasm_time_ms=${WASM_TIME}" >> "$GITHUB_OUTPUT"
 
       - name: Generate benchmark report
@@ -62,9 +74,9 @@ jobs:
           REPORT
           echo "" >> benchmark_results/benchmark_report.md
           echo "Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> benchmark_results/benchmark_report.md
-          echo "Platform: ubuntu-latest" >> benchmark_results/benchmark_report.md
+          echo "Platform: ubuntu-latest (average of 5 iterations)" >> benchmark_results/benchmark_report.md
           echo "" >> benchmark_results/benchmark_report.md
-          echo "| Backend | Decode Time (ms) |" >> benchmark_results/benchmark_report.md
+          echo "| Backend | Avg Decode Time (ms) |" >> benchmark_results/benchmark_report.md
           echo "|---------|-----------------|" >> benchmark_results/benchmark_report.md
           echo "| CGO     | ${{ steps.cgo-bench.outputs.cgo_time_ms }} |" >> benchmark_results/benchmark_report.md
           echo "| WASM    | ${{ steps.wasm-bench.outputs.wasm_time_ms }} |" >> benchmark_results/benchmark_report.md

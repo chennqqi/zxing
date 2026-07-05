@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  release-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +44,77 @@ jobs:
           cp zxing-cli-wasm release-assets/
           tar czf release-assets/libraries-linux-x64.tar.gz -C lib/linux-x64 .
           tar czf release-assets/libraries-windows-x64.tar.gz -C lib/windows-x64 .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-linux
+          path: release-assets/*
+          if-no-files-found: error
+
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc
+
+      - name: Add MinGW-w64 to PATH
+        shell: bash
+        run: echo "C:/msys64/mingw64/bin" >> $GITHUB_PATH
+
+      - name: Build CLI (CGO backend)
+        shell: bash
+        run: |
+          CGO_ENABLED=1 \
+          CGO_CFLAGS="-I$(pwd)/include" \
+          CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
+          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++" \
+          go build -buildvcs=false -o zxing-cli-windows-x64.exe ./cmd/zxing-cli
+
+      - name: Build CLI (WASM backend)
+        shell: bash
+        run: |
+          CGO_ENABLED=0 go build -buildvcs=false -o zxing-cli-windows-wasm.exe ./cmd/zxing-cli
+
+      - name: Test before release
+        shell: bash
+        run: |
+          ./zxing-cli-windows-x64.exe -i testdata/qrcode_test.png --try-harder
+          ./zxing-cli-windows-wasm.exe -i testdata/qrcode_test.png --try-harder --backend wasm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-windows
+          path: |
+            zxing-cli-windows-x64.exe
+            zxing-cli-windows-wasm.exe
+          if-no-files-found: error
+
+  release:
+    needs: [release-linux, release-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets-linux
+          path: release-assets
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets-windows
+          path: release-assets
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

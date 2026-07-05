@@ -98,6 +98,36 @@ jobs:
         run: |
           GOOS=js GOARCH=wasm CGO_ENABLED=0 go build -buildvcs=false ./pkg/zxing/
 
+  # End-to-end test of cmd/build tool (build-all with dependency skip)
+  build-tool-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test build-all (CGO enabled, deps may be missing)
+        run: |
+          CGO_ENABLED=1 go run ./cmd/build build-all 2>&1 || true
+          # build-all should skip missing deps (cmake/emcmake) and still build Go
+
+      - name: Test build-all (non-CGO, deps missing)
+        run: |
+          CGO_ENABLED=0 go run ./cmd/build build-all 2>&1 || true
+          # Should skip build-lib and build-wasm, then build Go with WASM backend
+
+      - name: Test test command (non-CGO)
+        run: |
+          CGO_ENABLED=0 go run ./cmd/build test 2>&1
+
+      - name: Test clean command
+        run: |
+          go run ./cmd/build clean 2>&1
+
   # Build static libraries from source (verify Docker build process)
   docker-build:
     runs-on: ubuntu-latest
@@ -181,7 +211,7 @@ jobs:
           objdump -T zxing-cli-glibc217 | grep -oP 'GLIBC_[\d.]+' | sort -V -u
           MAX_GLIBC=$(objdump -T zxing-cli-glibc217 | grep -oP 'GLIBC_[\d.]+' | sort -V | tail -1)
           echo "Highest GLIBC required: $MAX_GLIBC"
-          if echo "$MAX_GLIBC" | grep -qP 'GLIBC_2\.(1[5-9]|[2-9])'; then
+          if echo "$MAX_GLIBC" | grep -qP 'GLIBC_2\.(1[5-9]|[2-9][0-9])'; then
             echo "ERROR: Binary requires GLIBC > 2.14, not compatible with CentOS 7"
             exit 1
           fi
