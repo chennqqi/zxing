@@ -45,17 +45,16 @@ fi
 
 for f in $FILES; do
     echo "Patching: $f"
-    # Replace 'using enum BarcodeFormat;' with #define macros
-    # Use a temp file for the replacement to handle multi-line
-    python3 -c "
-import sys
-with open('$f', 'r', encoding='utf-8') as fh:
-    content = fh.read()
-defines = '''$DEFINES'''
-content = content.replace('using enum BarcodeFormat;', defines)
-with open('$f', 'w', encoding='utf-8') as fh:
-    fh.write(content)
-"
+    # Replace 'using enum BarcodeFormat;' with static constexpr declarations.
+    # Use a temp file to hold the replacement string, then sed reads it.
+    # This avoids python3 dependency (CentOS 7 does not ship python3 by default).
+    replacesfile=$(mktemp)
+    printf '%s' "$DEFINES" > "$replacesfile"
+    sed -i "/using enum BarcodeFormat;/{
+        r $replacesfile
+        d
+    }" "$f"
+    rm -f "$replacesfile"
 done
 
 echo "Patch applied successfully to $(echo "$FILES" | wc -w) file(s)"
