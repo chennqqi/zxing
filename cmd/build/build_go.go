@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 )
 
 // buildGo builds Go packages with CGO environment if available.
@@ -46,15 +47,35 @@ func buildGo(args []string) error {
 	return nil
 }
 
+// isDepMissingError returns true if the error indicates a missing build
+// dependency (e.g. cmake or emcmake command not found).
+func isDepMissingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "executable file not found") ||
+		strings.Contains(msg, "no such file or directory") ||
+		strings.Contains(msg, "command not found")
+}
+
 // buildAll builds everything: C++ libraries, WASM module, and Go packages.
-// Missing build dependencies (CMake, EMSDK) produce a warning and skip that step
-// rather than failing the entire build.
+// Steps with missing build dependencies (CMake, EMSDK) are skipped with a
+// warning; source compilation failures return a fatal error.
 func buildAll(args []string) error {
 	if err := buildLib(args); err != nil {
-		fmt.Printf("Warning: build-lib skipped (%v)\n", err)
+		if isDepMissingError(err) {
+			fmt.Printf("Warning: build-lib skipped (dependency missing: %v)\n", err)
+		} else {
+			return fmt.Errorf("build-lib failed: %w", err)
+		}
 	}
 	if err := buildWasm(args); err != nil {
-		fmt.Printf("Warning: build-wasm skipped (%v)\n", err)
+		if isDepMissingError(err) {
+			fmt.Printf("Warning: build-wasm skipped (dependency missing: %v)\n", err)
+		} else {
+			return fmt.Errorf("build-wasm failed: %w", err)
+		}
 	}
 	if err := buildGo(args); err != nil {
 		return fmt.Errorf("build-go failed: %w", err)

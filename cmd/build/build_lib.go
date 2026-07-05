@@ -67,16 +67,10 @@ func buildLib(args []string) error {
 		return fmt.Errorf("failed to create lib directory: %w", err)
 	}
 
-	// Copy libZXing.a and libzxingwrapper.a
+	// Copy static libraries (CMake + MinGW produces .a on all platforms)
 	artifacts := []string{
 		filepath.Join(buildDir, "lib", "libZXing.a"),
 		filepath.Join(buildDir, "lib", "libzxingwrapper.a"),
-	}
-	if runtime.GOOS == "windows" {
-		artifacts = []string{
-			filepath.Join(buildDir, "lib", "libZXing.lib"),
-			filepath.Join(buildDir, "lib", "libzxingwrapper.lib"),
-		}
 	}
 
 	for _, src := range artifacts {

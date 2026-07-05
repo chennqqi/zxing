@@ -22,7 +22,7 @@ Commands:
 Environment:
   CGO_ENABLED=0  Force non-CGO (WASM) backend
   CGO_ENABLED=1  Force CGO backend (requires precompiled libraries)
-  (unset)        Auto-detect: CGO if libs exist, otherwise non-CGO
+  (unset/other)  Auto-detect: CGO if libs exist, otherwise non-CGO
 
 Examples:
   go run ./cmd/build build-go

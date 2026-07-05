@@ -101,12 +101,14 @@ func buildCGOEnv() ([]string, error) {
 }
 
 // buildNonCGOEnv returns environment variables for non-CGO builds.
+// All CGO_* prefixed variables are removed for a clean environment.
 func buildNonCGOEnv() []string {
 	env := make([]string, 0, len(os.Environ())+1)
 	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "CGO_ENABLED=") {
-			env = append(env, e)
+		if strings.HasPrefix(e, "CGO_") {
+			continue
 		}
+		env = append(env, e)
 	}
 	env = append(env, "CGO_ENABLED=0")
 	return env
@@ -136,20 +138,13 @@ func envGet(env []string, key string) string {
 
 // hasPrebuiltLibs checks whether precompiled static libraries exist for the
 // current platform. Returns true if both libZXing and libzxingwrapper are found.
+// CMake + MinGW produces .a archives on all platforms (Linux, Windows, macOS).
 func hasPrebuiltLibs() bool {
 	dir := libDir()
 	abs := absPath(dir)
 
-	// Check for .a (Linux/macOS) or .lib (Windows) static libraries
-	var libExt string
-	if runtime.GOOS == "windows" {
-		libExt = ".lib"
-	} else {
-		libExt = ".a"
-	}
-
-	zxing := filepath.Join(abs, "libZXing"+libExt)
-	wrapper := filepath.Join(abs, "libzxingwrapper"+libExt)
+	zxing := filepath.Join(abs, "libZXing.a")
+	wrapper := filepath.Join(abs, "libzxingwrapper.a")
 
 	if _, err := os.Stat(zxing); err != nil {
 		return false
@@ -164,8 +159,9 @@ func hasPrebuiltLibs() bool {
 // library availability. It respects the CGO_ENABLED environment variable:
 //   - "0": force non-CGO (WASM backend)
 //   - "1": force CGO, returns error if precompiled libs are missing
-//   - unset: auto-detect — use CGO if libs exist, otherwise non-CGO
+//   - unset or other values: auto-detect — use CGO if libs exist, otherwise non-CGO
 //
+// Non-standard values like "true"/"false" are treated as unset (auto-detect).
 // Returns the environment slice and a descriptive message indicating which
 // backend was selected.
 func selectBuildEnv() (env []string, msg string, err error) {
