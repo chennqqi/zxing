@@ -1,0 +1,16 @@
+FROM alpine:3.18
+
+# Install MinGW-w64 cross-compiler, cmake, make, and git
+# GCC 12.2.0 supports C++17 fully (including CTAD)
+RUN apk add --no-cache \
+    mingw-w64-gcc \
+    mingw-w64-winpthreads \
+    cmake \
+    make \
+    git \
+    && mkdir -p /workspace
+
+WORKDIR /workspace
+
+# Default: cross-compile static libraries for Windows x64
+CMD ["sh", "-c", "cmake -G 'Unix Makefiles' -DCMAKE_TOOLCHAIN_FILE=/workspace/docker/mingw-w64-toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF . && make -j$(nproc)"]
