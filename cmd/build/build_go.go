@@ -49,10 +49,13 @@ func buildGo(args []string) error {
 // buildAll builds everything: C++ libraries, WASM module, and Go packages.
 // Steps with missing build dependencies (CMake, EMSDK) are skipped with a
 // warning; source compilation failures return a fatal error.
+// Additional args are passed to the final go build step.
 func buildAll(args []string) error {
+	skipped := 0
 	if err := buildLib(args); err != nil {
 		if isDepMissingError(err) {
 			fmt.Printf("Warning: build-lib skipped (dependency missing: %v)\n", err)
+			skipped++
 		} else {
 			return fmt.Errorf("build-lib failed: %w", err)
 		}
@@ -60,6 +63,7 @@ func buildAll(args []string) error {
 	if err := buildWasm(args); err != nil {
 		if isDepMissingError(err) {
 			fmt.Printf("Warning: build-wasm skipped (dependency missing: %v)\n", err)
+			skipped++
 		} else {
 			return fmt.Errorf("build-wasm failed: %w", err)
 		}
@@ -67,6 +71,10 @@ func buildAll(args []string) error {
 	if err := buildGo(args); err != nil {
 		return fmt.Errorf("build-go failed: %w", err)
 	}
-	fmt.Println("All builds complete.")
+	if skipped > 0 {
+		fmt.Printf("All requested builds completed (%d step(s) skipped due to missing dependencies).\n", skipped)
+	} else {
+		fmt.Println("All builds complete.")
+	}
 	return nil
 }

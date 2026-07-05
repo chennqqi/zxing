@@ -9,6 +9,8 @@ import (
 
 // dockerBuild builds Linux static library in a CentOS 7 Docker container.
 // This ensures glibc 2.17 compatibility for the precompiled library.
+// The container includes devtoolset-10 (GCC 10), cmake3, and Go 1.24.
+// zxing-cpp v3.0.2 requires C++20 features patched by patch_using_enum.sh.
 func dockerBuild(args []string) error {
 	root, err := projectRoot()
 	if err != nil {
@@ -19,7 +21,7 @@ func dockerBuild(args []string) error {
 
 	// Check if Dockerfile exists
 	if _, err := os.Stat(dockerfilePath); err != nil {
-		return fmt.Errorf("Dockerfile not found: %s (run build tool first to create it)", dockerfilePath)
+		return fmt.Errorf("Dockerfile not found: %s", dockerfilePath)
 	}
 
 	// Build Docker image
@@ -39,11 +41,14 @@ func dockerBuild(args []string) error {
 	}
 
 	cmd = exec.Command("docker", "run", "--rm",
-		"-v", fmt.Sprintf("%s:/workspace", root),
-		"-v", fmt.Sprintf("%s:/workspace/lib/linux-x64", libDir),
+		"-v", fmt.Sprintf("%s:/workspace:Z", root),
 		"zxing-linux-build",
 		"bash", "-c",
-		"cd /workspace && cmake -G 'Unix Makefiles' -DCMAKE_BUILD_TYPE=Release . && make -j$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-x64/",
+		"/tmp/patch_using_enum.sh /workspace/zxing-cpp && "+
+			"cd /tmp && rm -rf build && mkdir -p build && cd build && "+
+			"cmake3 -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF "+
+			"-DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_FLAGS=-fcoroutines /workspace && "+
+			"make -j$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-x64/",
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

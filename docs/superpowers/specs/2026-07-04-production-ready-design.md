@@ -98,14 +98,16 @@ Both files share the same Go code (type constants, `Decode`, `DecodeMulti` funct
 
 | Platform | Build Environment | Artifacts | Compatibility |
 |----------|-------------------|----------|---------------|
-| Linux x64 | Docker CentOS 7 (glibc 2.17, devtoolset-7 GCC 7, Vault mirror) | `libZXing.a`, `libzxingwrapper.a` | RHEL 7-10, Debian 9+, Ubuntu 16+ |
+| Linux x64 | Docker CentOS 7 (glibc 2.17, devtoolset-10 GCC 10, C++20) | `libZXing.a`, `libzxingwrapper.a` | RHEL 7-10, Debian 9+, Ubuntu 16+ |
 | Windows x64 | Windows + MinGW-w64 GCC (CMake MinGW Makefiles) | `libZXing.a`, `libzxingwrapper.a` | Windows 10+ |
 
 **CentOS 7 EOL note**: CentOS 7 reached EOL in June 2024. The Docker image uses Vault mirror (`vault.centos.org`) for package repositories. The compatibility target is glibc 2.17. If CentOS 7 images become unavailable, AlmaLinux 7 or Rocky Linux 7 can be used as drop-in replacements.
 
+**GCC 10 / C++20 note**: zxing-cpp v3.0.2 uses C++20 features (`using enum`, coroutines). GCC 10 (via devtoolset-10) provides partial C++20 support. The `docker/patch_using_enum.sh` script replaces `using enum` declarations with `#define` macros, and `-fcoroutines` flag enables coroutine support.
+
 ### Pre-compiled Library Audit Trail
 
-A `lib/BUILDINFO.md` file is maintained alongside the pre-compiled libraries, recording:
+A `lib/{os}-{arch}/BUILDINFO` file is maintained alongside the pre-compiled libraries, recording:
 - zxing-cpp version / commit hash
 - Build date and Docker image used (for Linux)
 - Compiler version (GCC/MinGW version)
@@ -216,11 +218,12 @@ zxing/
 │   ├── zxing/              # Unified interface layer
 │   └── wasm/               # WASM runtime (wazero implementation)
 ├── lib/                    # Pre-compiled static libraries
-│   ├── BUILDINFO.md        # Build audit trail (version, checksums, compiler info)
 │   ├── linux-x64/
+│   │   ├── BUILDINFO        # Build audit trail (version, checksums, compiler info)
 │   │   ├── libZXing.a
 │   │   └── libzxingwrapper.a
 │   └── windows-x64/
+│       ├── BUILDINFO
 │       ├── libZXing.a
 │       └── libzxingwrapper.a
 ├── include/                # C header files
@@ -229,7 +232,7 @@ zxing/
 │   └── ZXing/              # zxing-cpp public headers
 ├── wasm/                   # Pre-compiled WASM file
 │   └── zxingwrapper.wasm
-├── zxing-cpp/              # git submodule (v2.3.0)
+├── zxing-cpp/              # git submodule (v3.0.2)
 ├── src/                    # C++ wrapper source
 │   ├── zxing.cpp
 │   └── zxing_internal.h

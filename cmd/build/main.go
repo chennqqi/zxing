@@ -13,7 +13,8 @@ Commands:
   build-lib      Build C++ static libraries via CMake
   build-wasm     Build WASM module via Emscripten
   build-go       Build Go packages (auto-detects CGO or non-CGO)
-  build-all      Build everything (lib + wasm + go, skips missing deps)
+  build-all      Build everything (lib + wasm + go, skips missing deps).
+                 Additional args are passed to the final go build step.
   sync-headers   Sync ZXing-CPP headers to include/ZXing/
   test           Run Go tests (auto-detects CGO or non-CGO)
   clean          Remove build artifacts (build/ and build-wasm/)
