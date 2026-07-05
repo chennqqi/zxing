@@ -1,7 +1,9 @@
+# Alpine is fine for Windows cross-compilation: MinGW produces PE binaries
+# (Windows format), not ELF. Host libc (musl) does not affect the output.
 FROM alpine:3.18
 
 # Install MinGW-w64 cross-compiler, cmake, make, and git
-# GCC 12.2.0 supports C++17 fully (including CTAD)
+# GCC 12.2.0 supports C++20
 RUN apk add --no-cache \
     mingw-w64-gcc \
     mingw-w64-winpthreads \

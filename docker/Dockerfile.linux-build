@@ -1,15 +1,35 @@
-FROM alpine:3.18
+# CentOS 7 (glibc 2.17) + devtoolset-10 (GCC 10.2, C++20)
+# Ensures binary compatibility with CentOS 7+, Ubuntu 16.04+, RHEL 7+, Debian 8+
+FROM centos:7
 
-# Install GCC 12 (C++20 support), cmake, make, git
-# zxing-cpp v3.0.0+ requires C++20
-RUN apk add --no-cache \
-    g++ \
-    gcc \
-    cmake \
-    make \
-    git \
-    && mkdir -p /workspace
+# CentOS 7 is EOL (June 2024), use Aliyun vault mirrors
+RUN rm -f /etc/yum.repos.d/CentOS-*.repo && \
+    printf '[base]\nname=CentOS-7 - Base\nbaseurl=https://mirrors.aliyun.com/centos-vault/7.9.2009/os/$basearch/\ngpgcheck=0\nenabled=1\n\n[updates]\nname=CentOS-7 - Updates\nbaseurl=https://mirrors.aliyun.com/centos-vault/7.9.2009/updates/$basearch/\ngpgcheck=0\nenabled=1\n\n[extras]\nname=CentOS-7 - Extras\nbaseurl=https://mirrors.aliyun.com/centos-vault/7.9.2009/extras/$basearch/\ngpgcheck=0\nenabled=1\n' > /etc/yum.repos.d/CentOS-Base.repo
+
+# Configure SCL repos for devtoolset-10 (GCC 10, C++20 support)
+RUN printf '[centos-sclo-sclo]\nname=CentOS-7 - SCLo sclo\nbaseurl=https://mirrors.aliyun.com/centos-vault/7.9.2009/sclo/$basearch/sclo/\ngpgcheck=0\nenabled=1\n\n[centos-sclo-rh]\nname=CentOS-7 - SCLo rh\nbaseurl=https://mirrors.aliyun.com/centos-vault/7.9.2009/sclo/$basearch/rh/\ngpgcheck=0\nenabled=1\n' > /etc/yum.repos.d/CentOS-SCLo.repo
+
+# Configure EPEL repo for cmake3
+RUN printf '[epel]\nname=CentOS-7 - EPEL\nbaseurl=https://mirrors.aliyun.com/epel-archive/7/$basearch/\ngpgcheck=0\nenabled=1\n' > /etc/yum.repos.d/epel.repo
+
+# Install devtoolset-10 (GCC 10.2, C++20 partial), cmake3 (3.17), make, git
+RUN yum install -y \
+        devtoolset-10-gcc \
+        devtoolset-10-gcc-c++ \
+        cmake3 \
+        make \
+        git \
+    && yum clean all && \
+    rm -rf /var/cache/yum
+
+# Enable devtoolset-10 by default (explicit full PATH for reliability)
+ENV PATH=/opt/rh/devtoolset-10/root/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV LD_LIBRARY_PATH=/opt/rh/devtoolset-10/root/usr/lib64:/opt/rh/devtoolset-10/root/usr/lib
 
 WORKDIR /workspace
 
-CMD ["sh", "-c", "cmake -G 'Unix Makefiles' -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF . && make -j$(nproc)"]
+# Patch zxing-cpp for GCC 10 compatibility (GCC 10 lacks 'using enum' from C++20)
+COPY patch_using_enum.sh /tmp/patch_using_enum.sh
+RUN chmod +x /tmp/patch_using_enum.sh
+
+CMD ["sh", "-c", "/tmp/patch_using_enum.sh /workspace/zxing-cpp && cmake3 -G 'Unix Makefiles' -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF . && make -j$(nproc)"]

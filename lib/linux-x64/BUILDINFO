@@ -1,12 +1,13 @@
 Build: Linux x64 (native compile)
 Date: 2026-07-05
 zxing-cpp: v3.0.2
-Builder: Alpine 3.18 + gcc 12.2.0
-Toolchain: docker/Dockerfile.linux-build
-CMake: -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=20
-Format: ELF x86-64 (Linux static archive)
+Builder: CentOS 7 (glibc 2.17) + devtoolset-10 (GCC 10.2.1)
+Toolchain: docker/Dockerfile.linux-build + docker/patch_using_enum.sh
+CMake: -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_FLAGS=-fcoroutines
+Patches: using enum BarcodeFormat -> static constexpr (GCC 10 compatibility)
+Format: ELF x86-64 (Linux static archive, glibc 2.17 compatible)
 Libraries:
-  libZXing.a - ZXing-CPP core static library (3,011,002 bytes)
-    SHA-256: 484939d9c44db9d17be65aabc83532b320b8c68f578039ceebdc3f6eec4855a0
-  libzxingwrapper.a - CGO wrapper static library (193,194 bytes)
-    SHA-256: 9d27c088d0497f84c6b00d40ed883b9a5a51f33a2353002830e60e0051cfc13a
+  libZXing.a - ZXing-CPP core static library (2,905,570 bytes)
+    SHA-256: abf8596190bcd244d66da69a534204c8b6c77c941deb26116fb84ee4376089f3
+  libzxingwrapper.a - CGO wrapper static library (146,478 bytes)
+    SHA-256: 885a9109b3a944c4d2a2d27648bd4724872a65e2bc5c63f15cc9ba58f115ce86

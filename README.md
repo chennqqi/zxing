@@ -135,7 +135,7 @@ go run ./cmd/build test
 # 清理构建产物
 go run ./cmd/build clean
 
-# Docker 中构建 Linux 静态库（Alpine 3.18, GCC 12, C++20）
+# Docker 中构建 Linux 静态库（CentOS 7, glibc 2.17, GCC 10, C++20）
 go run ./cmd/build docker-build
 ```
 
@@ -144,21 +144,26 @@ go run ./cmd/build docker-build
 如果需要重新编译 C++ 静态库（例如更新了 zxing-cpp submodule）：
 
 ```bash
-# Linux x64（使用 Docker）
+# Linux x64（使用 Docker, CentOS 7 + devtoolset-10, glibc 2.17 兼容）
 docker build -t zxing-linux-build -f docker/Dockerfile.linux-build docker/
 docker run --rm -v "$PWD":/workspace:Z zxing-linux-build \
-  sh -c "cd /tmp && mkdir -p build && cd build && \
-  cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF /workspace && \
-  make -j$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-x64/"
+  sh -c "/tmp/patch_using_enum.sh /workspace/zxing-cpp && \
+  cd /tmp && rm -rf build && mkdir -p build && cd build && \
+  cmake3 -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF \
+  -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_FLAGS=-fcoroutines /workspace && \
+  make -j\$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-x64/"
 
-# Windows x64（使用 Docker 交叉编译）
+# Windows x64（使用 Docker 交叉编译, MinGW-w64）
 docker build -t zxing-win-build -f docker/Dockerfile.win-build docker/
 docker run --rm -v "$PWD":/workspace:Z zxing-win-build \
   sh -c "cd /tmp && mkdir -p build && cd build && \
   cmake -DCMAKE_TOOLCHAIN_FILE=/workspace/docker/mingw-w64-toolchain.cmake \
   -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF /workspace && \
-  make -j$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/windows-x64/"
+  make -j\$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/windows-x64/"
 ```
+
+> **Linux 兼容性**: Linux 静态库在 CentOS 7 (glibc 2.17) 上编译，兼容 CentOS 7+、Ubuntu 16.04+、RHEL 7+、Debian 8+ 等所有使用 glibc 2.17+ 的发行版。
+> GCC 10 需要 patch 脚本 (`docker/patch_using_enum.sh`) 替换 `using enum` 语法和 `-fcoroutines` 标志。
 
 ## 环境变量配置
 

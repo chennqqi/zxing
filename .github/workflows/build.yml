@@ -110,11 +110,14 @@ jobs:
         run: |
           docker build -t zxing-linux-build -f docker/Dockerfile.linux-build docker/
           docker run --rm -v "$PWD":/workspace:Z zxing-linux-build sh -c "
-            cd /tmp && mkdir -p build && cd build && \
-            cmake -G 'Unix Makefiles' \
+            /tmp/patch_using_enum.sh /workspace/zxing-cpp && \
+            cd /tmp && rm -rf build && mkdir -p build && cd build && \
+            cmake3 -G 'Unix Makefiles' \
               -DCMAKE_BUILD_TYPE=Release \
               -DBUILD_STATIC_LIB=ON \
               -DBUILD_SHARED_LIBS=OFF \
+              -DCMAKE_CXX_STANDARD=20 \
+              -DCMAKE_CXX_FLAGS=-fcoroutines \
               /workspace && \
             make -j\$(nproc) && \
             cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-x64/
