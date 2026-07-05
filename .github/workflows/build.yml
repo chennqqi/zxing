@@ -193,3 +193,102 @@ jobs:
           name: zxing-cli-linux-x64-glibc217
           path: zxing-cli-glibc217
           if-no-files-found: error
+
+  # Build and test on Windows with CGO backend (uses precompiled MinGW .a libraries)
+  windows-cgo-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc
+
+      - name: Add MinGW-w64 to PATH
+        shell: bash
+        run: echo "C:/msys64/mingw64/bin" >> $GITHUB_PATH
+
+      - name: Verify MinGW GCC
+        shell: bash
+        run: |
+          gcc --version
+          which gcc
+
+      - name: Build CGO
+        shell: bash
+        run: |
+          CGO_ENABLED=1 \
+          CGO_CFLAGS="-I$(pwd)/include" \
+          CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
+          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++" \
+          go build -buildvcs=false ./...
+
+      - name: Test CGO
+        shell: bash
+        run: |
+          CGO_ENABLED=1 \
+          CGO_CFLAGS="-I$(pwd)/include" \
+          CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
+          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++" \
+          go test -buildvcs=false -v ./pkg/zxing/...
+
+      - name: Build CLI
+        shell: bash
+        run: |
+          CGO_ENABLED=1 \
+          CGO_CFLAGS="-I$(pwd)/include" \
+          CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
+          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++" \
+          go build -buildvcs=false -o zxing-cli.exe ./cmd/zxing-cli
+
+      - name: Test CLI
+        shell: bash
+        run: |
+          ./zxing-cli.exe -i testdata/qrcode_test.png --try-harder
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zxing-cli-windows-x64
+          path: zxing-cli.exe
+          if-no-files-found: error
+
+  # Build and test on Windows with WASM backend (pure Go, no CGO)
+  windows-wasm-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build non-CGO
+        shell: bash
+        run: |
+          CGO_ENABLED=0 go build -buildvcs=false ./...
+
+      - name: Test WASM backend
+        shell: bash
+        run: |
+          CGO_ENABLED=0 go test -buildvcs=false -v ./pkg/wasm/...
+
+      - name: Build CLI (WASM backend)
+        shell: bash
+        run: |
+          CGO_ENABLED=0 go build -buildvcs=false -o zxing-cli-wasm.exe ./cmd/zxing-cli
+
+      - name: Test CLI (WASM backend)
+        shell: bash
+        run: |
+          ./zxing-cli-wasm.exe -i testdata/qrcode_test.png --try-harder --backend wasm
