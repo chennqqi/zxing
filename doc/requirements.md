@@ -105,3 +105,13 @@
 - 评审报告保存至 `docs/superpowers/reviews/2026-07-04-production-ready-design-review.md`
 - 升级 zxing-cpp 从 v2.3.0 到 v3.0.2
 - 增加 GitHub Action 检查上游新版本并通知
+
+## 2026-07-05: 评审 `cmd/build/build_go.go` 实现
+
+- 对新增的 `cmd/build/build_go.go` 及构建工具集成进行代码评审
+- 评审报告保存至 `docs/superpowers/reviews/2026-07-05-cmd-build-implementation-review.md`
+
+## 2026-07-05 (二): 复评 `cmd/build` 修复版
+
+- 针对用户根据首轮评审修改后的 `cmd/build/build_go.go` 及 `env.go`/`test.go` 进行复评
+- 评审报告保存至 `docs/superpowers/reviews/2026-07-05-cmd-build-implementation-review-2.md`

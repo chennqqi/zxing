@@ -167,3 +167,43 @@
 - 重新构建 Linux x64 和 Windows x64 静态库
 - 识别率 89.9% (与 v2.3.0 一致, 部分测试样本 v3.0.2 原生也无法解码)
 - 增加 .github/workflows/check-upstream.yml 每周检查新版本并创建 issue 通知
+
+### [2026-07-05] 代码评审: `cmd/build/build_go.go`
+- 评审对象: 新增的 `cmd/build/build_go.go` 及 `cmd/build/env.go`, `main.go`, `test.go` 等关联文件
+- 核心问题:
+  - `buildCGOEnv()` 只在 `projectRoot()` 失败时返回错误, 未检测预编译库是否存在
+  - 缺少库时仍尝试 CGO 构建, 导致链接失败且报错信息不友好
+  - 未尊重用户已设置的 `CGO_ENABLED=0` 偏好
+  - `buildAll` 顺序固定, 缺少跳过或依赖检测机制
+  - Windows 上输出 `bin/zxing-cli` 而非 `.exe`
+  - `args` 参数未被使用
+- 建议:
+  - 增加 `hasPrebuiltLibs()` 检测, 缺失时自动回退非 CGO
+  - 读取 `CGO_ENABLED` 环境变量, 允许用户强制选择后端
+  - 提取 `selectBuildEnv()` 公共函数供 `buildGo` 和 `runTest` 复用
+  - Windows 输出路径动态添加 `.exe`
+  - `build-go` 透传 `args` 给 `go build`
+  - `build-all` 增加跳过标志或依赖检测提示
+- 评审报告: `docs/superpowers/reviews/2026-07-05-cmd-build-implementation-review.md`
+
+### [2026-07-05] 代码复评: `cmd/build` 修复版
+- 评审对象: 用户根据首轮评审修改后的 `cmd/build/build_go.go`, `env.go`, `test.go`
+- 修复确认:
+  - ✅ 新增 `hasPrebuiltLibs()` 自动检测预编译库
+  - ✅ 新增 `selectBuildEnv()` 统一处理 CGO_ENABLED=0/1/未设置
+  - ✅ `buildGo` 与 `runTest` 复用同一后端选择逻辑
+  - ✅ `buildGo` 透传 `args` 给 `go build`
+  - ✅ Windows 动态添加 `.exe`
+  - ✅ `buildAll` 对依赖缺失的 lib/wasm 构建改为警告跳过
+- 新增问题:
+  - Windows 静态库命名 `libZXing.lib` 与 CGO `-lZXing` 链接标志不一致, 与生产就绪规格也不一致
+  - `buildAll` 的“警告跳过”语义过宽, 任何错误都会跳过, 可能掩盖源码编译失败
+  - `buildAll` 的 `args` 透传对 `buildLib`/`buildWasm` 无效果, 仅对 `buildGo` 生效, 存在歧义
+  - `buildNonCGOEnv()` 未清理 `CGO_CFLAGS`/`CGO_CXXFLAGS`/`CGO_LDFLAGS`
+  - `CGO_ENABLED` 非标准值 (true/false) 按未设置处理, 未在文档说明
+- 建议:
+  - 统一 Windows 库命名: 采用 `ZXing.lib`/`zxingwrapper.lib` (与规格一致)
+  - `buildAll` 仅因依赖缺失才跳过, 源码编译失败仍应返回错误
+  - 更新 `usageText` 说明 `CGO_ENABLED` 的三种取值
+  - 为 `selectBuildEnv` 和 `hasPrebuiltLibs` 补充单元测试
+- 评审报告: `docs/superpowers/reviews/2026-07-05-cmd-build-implementation-review-2.md`
