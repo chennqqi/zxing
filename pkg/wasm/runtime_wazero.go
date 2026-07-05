@@ -1,4 +1,4 @@
-//go:build !cgo || !(linux || windows)
+//go:build (!cgo || !(linux || windows)) && !(js && wasm)
 
 // Package wasm provides ZXing WebAssembly runtime support via wazero.
 package wasm

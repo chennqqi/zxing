@@ -7,4 +7,6 @@ CMake: -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release 
 Format: ELF x86-64 (Linux static archive)
 Libraries:
   libZXing.a - ZXing-CPP core static library (3,011,002 bytes)
+    SHA-256: 484939d9c44db9d17be65aabc83532b320b8c68f578039ceebdc3f6eec4855a0
   libzxingwrapper.a - CGO wrapper static library (193,194 bytes)
+    SHA-256: 9d27c088d0497f84c6b00d40ed883b9a5a51f33a2353002830e60e0051cfc13a

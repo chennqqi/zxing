@@ -11,6 +11,20 @@
   - **WASM 后端**：基于 [wazero](https://github.com/tetratelabs/wazero) 的纯 Go WASM 运行时，无 CGO 依赖
 - 编译期后端选择：通过 Go build tags 自动选择
 - 跨平台支持：Linux, Windows, macOS
+- 预编译静态库：内置 Linux x64 和 Windows x64 的静态库，无需本地 C++ 编译环境
+
+## 平台支持
+
+| 平台 | CGO 后端 | WASM 后端 | 说明 |
+|------|----------|----------|------|
+| Linux x64 | ✅ | ✅ | 预编译静态库已包含 |
+| Windows x64 | ✅ | ✅ | 预编译静态库已包含（需 MinGW-w64 GCC）|
+| macOS | ❌ | ✅ | CGO 后端不支持，使用 WASM |
+| js/wasm | ❌ | ✅ | 浏览器/Node.js 环境 |
+
+> **Windows CGO 注意事项**: Windows 上的 CGO 后端需要 **MinGW-w64** GCC 工具链（非 MSVC）。
+> 预编译静态库使用 MinGW-w64 编译，与 Go CGO 默认工具链兼容。
+> 安装方法：`choco install mingw` 或从 [winlibs.com](https://winlibs.com/) 下载。
 
 ## 后端选择
 
@@ -121,8 +135,29 @@ go run ./cmd/build test
 # 清理构建产物
 go run ./cmd/build clean
 
-# Docker 中构建 Linux 静态库（CentOS 7, glibc 2.17 兼容）
+# Docker 中构建 Linux 静态库（Alpine 3.18, GCC 12, C++20）
 go run ./cmd/build docker-build
+```
+
+### 重新编译静态库
+
+如果需要重新编译 C++ 静态库（例如更新了 zxing-cpp submodule）：
+
+```bash
+# Linux x64（使用 Docker）
+docker build -t zxing-linux-build -f docker/Dockerfile.linux-build docker/
+docker run --rm -v "$PWD":/workspace:Z zxing-linux-build \
+  sh -c "cd /tmp && mkdir -p build && cd build && \
+  cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF /workspace && \
+  make -j$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-x64/"
+
+# Windows x64（使用 Docker 交叉编译）
+docker build -t zxing-win-build -f docker/Dockerfile.win-build docker/
+docker run --rm -v "$PWD":/workspace:Z zxing-win-build \
+  sh -c "cd /tmp && mkdir -p build && cd build && \
+  cmake -DCMAKE_TOOLCHAIN_FILE=/workspace/docker/mingw-w64-toolchain.cmake \
+  -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF /workspace && \
+  make -j$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/windows-x64/"
 ```
 
 ## 环境变量配置

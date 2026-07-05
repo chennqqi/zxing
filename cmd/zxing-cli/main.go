@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	_ "golang.org/x/image/bmp"
 	"github.com/chennqqi/zxing/pkg/zxing"
+	_ "golang.org/x/image/bmp"
 )
 
 var (
@@ -23,14 +23,14 @@ var (
 
 func main() {
 	var (
-		imagePath    = flag.String("i", "", "Image file path to decode")
-		imageDir     = flag.String("d", "", "Directory containing images to decode (batch mode)")
-		backend      = flag.String("backend", "auto", "Backend to use: auto, cgo, wasm")
-		tryHarder    = flag.Bool("try-harder", false, "Try harder to decode")
-		formats      = flag.String("formats", "all", "Comma-separated list of formats (QR_CODE, CODE_128, etc.) or 'all'")
-		outputJSON   = flag.Bool("json", false, "Output results in JSON format")
-		showVersion  = flag.Bool("version", false, "Show version information")
-		showHelp     = flag.Bool("help", false, "Show help information")
+		imagePath   = flag.String("i", "", "Image file path to decode")
+		imageDir    = flag.String("d", "", "Directory containing images to decode (batch mode)")
+		backend     = flag.String("backend", "auto", "Backend to use: auto, cgo, wasm")
+		tryHarder   = flag.Bool("try-harder", false, "Try harder to decode")
+		formats     = flag.String("formats", "all", "Comma-separated list of formats (QR_CODE, CODE_128, etc.) or 'all'")
+		outputJSON  = flag.Bool("json", false, "Output results in JSON format")
+		showVersion = flag.Bool("version", false, "Show version information")
+		showHelp    = flag.Bool("help", false, "Show help information")
 	)
 
 	flag.Usage = func() {
@@ -67,7 +67,7 @@ func main() {
 	// 创建配置
 	config := &zxing.Config{
 		Backend:  parseBackend(*backend),
-		WASMPath: "wasm/zxing.wasm",
+		WASMPath: "wasm/zxingwrapper.wasm",
 		Debug:    false,
 	}
 
@@ -253,12 +253,12 @@ func isImageExtension(ext string) bool {
 func outputTextResult(imagePath string, result *zxing.Result) {
 	fmt.Printf("📷 File: %s\n", imagePath)
 	fmt.Printf("✅ Decoded successfully!\n")
-	
+
 	// 显示后端信息
 	if backend, ok := result.Metadata["backend"].(string); ok {
 		fmt.Printf("   Backend: %s\n", backend)
 	}
-	
+
 	fmt.Printf("   Text: %s\n", result.Text)
 	fmt.Printf("   Format: %s\n", result.Format)
 	if len(result.Points) > 0 {

@@ -124,6 +124,6 @@ func init() {
 	}
 
 	if os.Getenv("ZXING_WASM_PATH") == "" {
-		os.Setenv("ZXING_WASM_PATH", "../../wasm/zxing.wasm")
+		os.Setenv("ZXING_WASM_PATH", "../../wasm/zxingwrapper.wasm")
 	}
 }

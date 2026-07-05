@@ -37,7 +37,7 @@ jobs:
         run: |
           echo "=== CGO Backend Benchmark ==="
           START=$(date +%s%N)
-          ./zxing-cli -i data/qrcode_www.bing.com.png --try-harder
+          ./zxing-cli -i testdata/qrcode_test.png --try-harder
           END=$(date +%s%N)
           CGO_TIME=$(( (END - START) / 1000000 ))
           echo "CGO decode time: ${CGO_TIME}ms"
@@ -48,7 +48,7 @@ jobs:
         run: |
           echo "=== WASM Backend Benchmark ==="
           START=$(date +%s%N)
-          ./zxing-cli-wasm -i data/qrcode_www.bing.com.png --try-harder --backend wasm
+          ./zxing-cli-wasm -i testdata/qrcode_test.png --try-harder --backend wasm
           END=$(date +%s%N)
           WASM_TIME=$(( (END - START) / 1000000 ))
           echo "WASM decode time: ${WASM_TIME}ms"

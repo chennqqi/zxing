@@ -7,4 +7,6 @@ CMake: -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release 
 Format: PE x86-64 (Windows static archive)
 Libraries:
   libZXing.a - ZXing-CPP core static library (2,642,112 bytes)
+    SHA-256: 9643b9fc48360f8de038b658440fb7974ed755a3ea38591d83e394a21bf17831
   libzxingwrapper.a - CGO wrapper static library (179,468 bytes)
+    SHA-256: 1f0e5f04c1615c96538e1a31b9dc007c637d4af2f3926c6df77ccccd8c2b2d1f

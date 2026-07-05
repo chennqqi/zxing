@@ -2,12 +2,17 @@
 
 // Package zxing CGO binding for Windows platform.
 // This file provides the Cgo declarations and type definitions specific to Windows.
+//
+// Requirements:
+//   - MinGW-w64 GCC toolchain (NOT MSVC). The precompiled static libraries in
+//     lib/windows-x64/ are built with MinGW-w64 and are ABI-compatible with CGO.
+//   - Go's CGO on Windows uses MinGW GCC by default, which is compatible.
 package zxing
 
 /*
 #cgo CXXFLAGS: -std=c++20
 #cgo CFLAGS: -I${SRCDIR}/../../include
-#cgo LDFLAGS: -L${SRCDIR}/../../lib -lzxingwrapper -lZXing -lstdc++
+#cgo LDFLAGS: -L${SRCDIR}/../../lib/windows-x64 -lzxingwrapper -lZXing -lstdc++
 #include <stdlib.h>
 #include "zxing.h"
 */

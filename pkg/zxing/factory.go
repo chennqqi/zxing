@@ -27,9 +27,16 @@ func New(config *Config) (ZXing, error) {
 
 // NewCGO creates a CGO backend instance.
 // Returns an error if CGO is not available on the current platform.
+// CGO requires CGO_ENABLED=1 on linux or windows with precompiled static
+// libraries in lib/{linux,windows}-x64/. Run 'go run ./cmd/build build-lib'
+// or use Docker ('docker/Dockerfile.linux-build' or 'docker/Dockerfile.win-build')
+// to rebuild libraries if missing.
 func NewCGO(config *Config) (ZXing, error) {
 	if config == nil {
 		config = DefaultConfig()
+	}
+	if !cgoAvailable {
+		return nil, fmt.Errorf("CGO backend is not available (requires CGO_ENABLED=1 on linux or windows with precompiled static libraries in lib/{linux,windows}-x64/)")
 	}
 	return &cgoZXing{config: config}, nil
 }

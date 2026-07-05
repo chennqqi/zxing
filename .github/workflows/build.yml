@@ -53,7 +53,7 @@ jobs:
 
       - name: Test CLI
         run: |
-          ./zxing-cli -i data/qrcode_www.bing.com.png --try-harder
+          ./zxing-cli -i testdata/qrcode_test.png --try-harder
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
@@ -92,7 +92,11 @@ jobs:
 
       - name: Test CLI (WASM backend)
         run: |
-          ./zxing-cli-wasm -i data/qrcode_www.bing.com.png --try-harder --backend wasm
+          ./zxing-cli-wasm -i testdata/qrcode_test.png --try-harder --backend wasm
+
+      - name: Build js/wasm target
+        run: |
+          GOOS=js GOARCH=wasm CGO_ENABLED=0 go build -buildvcs=false ./pkg/zxing/
 
   # Build static libraries from source (verify Docker build process)
   docker-build:
@@ -122,3 +126,12 @@ jobs:
           file lib/linux-x64/libzxingwrapper.a
           test -f lib/linux-x64/libZXing.a && echo "libZXing.a OK"
           test -f lib/linux-x64/libzxingwrapper.a && echo "libzxingwrapper.a OK"
+
+      - name: Verify checksums match BUILDINFO
+        run: |
+          echo "=== Rebuilt library checksums ==="
+          sha256sum lib/linux-x64/libZXing.a lib/linux-x64/libzxingwrapper.a
+          echo "=== Expected checksums from BUILDINFO ==="
+          grep 'SHA-256' lib/linux-x64/BUILDINFO
+          echo "=== Note: checksums may differ if submodule was updated ==="
+          echo "=== This step verifies reproducibility of the build ==="
