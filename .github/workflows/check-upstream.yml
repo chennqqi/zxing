@@ -15,18 +15,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: false
 
       - name: Get current submodule version
         id: current
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Read the pinned submodule SHA from git tree
           CURRENT_SHA=$(git ls-tree HEAD zxing-cpp --object-only 2>/dev/null || echo "")
           if [ -n "$CURRENT_SHA" ]; then
-            # Try to get the tag name
-            CURRENT_TAG=$(git -C zxing-cpp describe --tags 2>/dev/null || echo "$CURRENT_SHA")
+            # Resolve SHA to tag name via GitHub API (submodule is not checked out)
+            CURRENT_TAG=$(gh api repos/zxing-cpp/zxing-cpp/tags --paginate \
+              --jq '.[] | select(.commit.sha == "'"$CURRENT_SHA"'") | .name' 2>/dev/null | head -1)
+            if [ -z "$CURRENT_TAG" ]; then
+              CURRENT_TAG="$CURRENT_SHA"
+            fi
           else
             CURRENT_TAG="unknown"
           fi
@@ -57,6 +63,12 @@ jobs:
           if [ -n "$EXISTING" ]; then
             echo "Issue #$EXISTING already exists for $LATEST, skipping"
           else
+            # Ensure the label exists before creating the issue
+            gh label create "upstream-update" \
+              --color "0e8a16" \
+              --description "Upstream zxing-cpp update available" \
+              --force 2>/dev/null || true
+
             gh issue create \
               --title "zxing-cpp upstream update available: $CURRENT -> $LATEST" \
               --body "## Upstream Update Notification

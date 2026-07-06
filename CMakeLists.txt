@@ -27,6 +27,12 @@ set(ZXING_UNIT_TESTS OFF CACHE BOOL "Build unit tests" FORCE)
 # 添加ZXingCPP子目录
 add_subdirectory(zxing-cpp)
 
+# Ensure stb is available for zxingwrapper (src/zxing.cpp uses stb_image.h)
+# zxing-cpp subdirectories may have already fetched stb via FetchContent,
+# but the IMPORTED target is scoped to that subdirectory and not visible here.
+include(${CMAKE_CURRENT_SOURCE_DIR}/zxing-cpp/zxing.cmake)
+zxing_add_package_stb()
+
 # 创建wrapper库（根据选项选择静态库或动态库）
 if(BUILD_STATIC_LIB)
     add_library(zxingwrapper STATIC src/zxing.cpp)
@@ -49,10 +55,11 @@ target_include_directories(zxingwrapper
         ${CMAKE_CURRENT_SOURCE_DIR}/zxing-cpp/core/src/maxicode
 )
 
-# 链接ZXing库
+# 链接ZXing库和stb图像库
 target_link_libraries(zxingwrapper
     PRIVATE
         ZXing
+        stb::stb
 )
 
 # 安装规则

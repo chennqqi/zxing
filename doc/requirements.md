@@ -92,6 +92,20 @@
 - 移除项目中内嵌的 zxing-cpp 源码副本，改为 git submodule 引用 https://github.com/zxing-cpp/zxing-cpp.git (v2.3.0)
 - 更新构建脚本，使用 `git submodule update --init --recursive` 替代手动 git clone
 
+## 2026-07-06: 修复 check-upstream workflow
+
+- 修复版本比较逻辑：submodule 未检出时 `git describe --tags` 失败回退为 SHA，改为通过 GitHub API 解析 SHA 到 tag 名
+- 修复 label 不存在导致 issue 创建失败：添加 `gh label create --force` 预创建 `upstream-update` label
+- 修复 Node.js 20 弃用警告：所有 workflow 中 `actions/checkout@v4` 升级为 `@v5`
+
+## 2026-07-06 (二): 修复 CI 构建失败
+
+- 修复 `TestBackendSelection/CGO_backend` 测试失败：CGO_ENABLED=0 时应 skip 而非 Fatal
+- 修复 Docker 构建中 `stb_image.h: No such file or directory`：CMakeLists.txt 中 zxingwrapper 目标缺少 stb 依赖
+  - 根因：zxing-cpp 子目录通过 FetchContent 获取 stb，但 IMPORTED target 仅在子目录作用域可见
+  - 修复：在顶层 CMakeLists.txt 中显式调用 `zxing_add_package_stb()` 并链接 `stb::stb` 到 zxingwrapper
+  - 同步修复 `CMakeLists-wasm.txt`，并禁用不需要的 `ZXING_C_API`
+
 ## 相关文档
 
 - `doc/windows-msvc-and-wasm-setup.md` - Windows平台MSVC和WASM构建环境说明

@@ -22,6 +22,7 @@ set(ZXING_BLACKBOX_TESTS OFF CACHE BOOL "Build the black box reader/writer tests
 set(ZXING_UNIT_TESTS OFF CACHE BOOL "Build the unit tests" FORCE)
 set(ZXING_INSTALL_TEST OFF CACHE BOOL "Test if the installed/public API works" FORCE)
 set(ZXING_PYTHON_MODULE OFF CACHE BOOL "Build the python module" FORCE)
+set(ZXING_C_API OFF CACHE BOOL "Build the C-API" FORCE)
 
 # Emscripten特定设置
 # STANDALONE_WASM=1 produces a WASM that doesn't depend on Emscripten JS runtime
@@ -42,6 +43,10 @@ set(EMSCRIPTEN_LINK_FLAGS
 # 添加ZXingCPP子目录
 add_subdirectory(zxing-cpp)
 
+# Ensure stb is available for zxingwrapper (src/zxing.cpp uses stb_image.h)
+include(${CMAKE_CURRENT_SOURCE_DIR}/zxing-cpp/zxing.cmake)
+zxing_add_package_stb()
+
 # 创建WASM wrapper库
 add_executable(zxingwrapper src/zxing.cpp)
 
@@ -60,10 +65,11 @@ target_include_directories(zxingwrapper
         ${CMAKE_CURRENT_SOURCE_DIR}/zxing-cpp/core/src/maxicode
 )
 
-# 链接ZXing库
+# 链接ZXing库和stb图像库
 target_link_libraries(zxingwrapper
     PRIVATE
         ZXing
+        stb::stb
 )
 
 # 设置Emscripten链接标志
