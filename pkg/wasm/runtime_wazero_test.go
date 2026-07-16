@@ -22,6 +22,20 @@ func TestWazeroLoadAndDecode(t *testing.T) {
 	}
 }
 
+func TestWazeroRequiredExports(t *testing.T) {
+	rt := NewRuntime()
+	if err := rt.Initialize(context.Background(), "../../wasm/zxingwrapper.wasm"); err != nil {
+		t.Fatalf("Failed to initialize wazero runtime: %v", err)
+	}
+	defer rt.Close()
+
+	for _, name := range []string{"malloc", "free", "configure_decode_options", "decode_barcode_pixels"} {
+		if rt.module.ExportedFunction(name) == nil {
+			t.Fatalf("required export %q is missing", name)
+		}
+	}
+}
+
 func TestWazeroDecodeQRCode(t *testing.T) {
 	rt := NewRuntime()
 	err := rt.Initialize(context.Background(), "../../wasm/zxingwrapper.wasm")
