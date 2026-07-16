@@ -9,23 +9,38 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"sync"
 
 	"github.com/chennqqi/zxing/pkg/wasm"
 )
 
 // wasmZXing implements the ZXing interface using the wazero WASM runtime.
 type wasmZXing struct {
+	mu      sync.Mutex
 	config  *Config
 	runtime *wasm.Runtime
 }
 
 // ensureRuntime lazily initializes the WASM runtime.
+// It re-initializes if the previous runtime was closed (e.g. by context cancellation).
 func (w *wasmZXing) ensureRuntime(ctx context.Context) error {
-	if w.runtime == nil {
-		w.runtime = wasm.NewRuntime()
-		if err := w.runtime.Initialize(ctx, w.config.WASMPath); err != nil {
-			return fmt.Errorf("failed to initialize WASM runtime: %w", err)
-		}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.runtime != nil && w.runtime.IsReady() {
+		return nil
+	}
+
+	// Discard any previous closed runtime
+	if w.runtime != nil {
+		w.runtime.Close()
+		w.runtime = nil
+	}
+
+	w.runtime = wasm.NewRuntime()
+	if err := w.runtime.Initialize(ctx, w.config.WASMPath); err != nil {
+		w.runtime = nil
+		return fmt.Errorf("failed to initialize WASM runtime: %w", err)
 	}
 	return nil
 }
@@ -66,7 +81,9 @@ func (w *wasmZXing) DecodeBytes(ctx context.Context, data []byte, width, height 
 		return nil, fmt.Errorf("empty image data")
 	}
 
-	result, err := w.runtime.DecodeImage(data, width, height, 4)
+	runtimeOpts := mapDecodeOptions(opts)
+
+	result, err := w.runtime.DecodeImage(ctx, data, width, height, 4, runtimeOpts)
 	if err != nil {
 		return nil, fmt.Errorf("WASM decode failed: %w", err)
 	}
@@ -83,6 +100,58 @@ func (w *wasmZXing) DecodeBytes(ctx context.Context, data []byte, width, height 
 			"backend": "wasm",
 		},
 	}, nil
+}
+
+// mapDecodeOptions converts public DecodeOptions to wasm.DecodeOptions.
+func mapDecodeOptions(opts *DecodeOptions) *wasm.DecodeOptions {
+	if opts == nil {
+		return nil
+	}
+
+	var formatFlags int
+	for _, f := range opts.PossibleFormats {
+		switch f {
+		case "QR_CODE":
+			formatFlags |= 1
+		case "AZTEC":
+			formatFlags |= 2
+		case "CODABAR":
+			formatFlags |= 4
+		case "CODE_39":
+			formatFlags |= 8
+		case "CODE_93":
+			formatFlags |= 16
+		case "CODE_128":
+			formatFlags |= 32
+		case "DATA_MATRIX":
+			formatFlags |= 64
+		case "EAN_8":
+			formatFlags |= 128
+		case "EAN_13":
+			formatFlags |= 256
+		case "ITF":
+			formatFlags |= 512
+		case "MAXICODE":
+			formatFlags |= 1024
+		case "PDF_417":
+			formatFlags |= 2048
+		case "UPC_A":
+			formatFlags |= 4096
+		case "UPC_E":
+			formatFlags |= 8192
+		}
+	}
+	if formatFlags == 0 {
+		formatFlags = 0xFFFF // FORMAT_ALL
+	}
+
+	return &wasm.DecodeOptions{
+		Formats:      formatFlags,
+		TryHarder:    opts.TryHarder,
+		TryRotate:    true,
+		TryInvert:    false,
+		TryDownscale: true,
+	}
 }
 
 // EncodeText encodes text to a barcode image using the WASM backend.
@@ -160,8 +229,13 @@ func (w *wasmZXing) EncodeToBytes(ctx context.Context, text string, opts *Encode
 
 // Close releases WASM runtime resources.
 func (w *wasmZXing) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	if w.runtime != nil {
-		return w.runtime.Close()
+		err := w.runtime.Close()
+		w.runtime = nil
+		return err
 	}
 	return nil
 }

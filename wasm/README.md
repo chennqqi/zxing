@@ -227,6 +227,14 @@ func main() {
 
 ## 更新日志
 
+- **v1.1.0**: WASM 后端修复与生产就绪
+  - 修复 WASM 解码 out-of-bounds 内存访问（替换 PNG+bump allocator 为 raw-pixel ABI）
+  - 添加并发安全（sync.Mutex 串行化 guest 内存事务）
+  - 传播 caller context.Context 到 wazero（支持取消/超时）
+  - 修复初始化失败时的资源泄漏
+  - DecodeOptions 正确传递到 WASM（格式过滤、try_harder 等）
+  - Close 幂等化，返回底层错误
+  - 升级 wazero v1.8.0 -> v1.12.0
 - **v1.0.0**: 初始WASM支持
   - 基本的条码解码功能
   - QR码编码功能

@@ -44,6 +44,10 @@ typedef struct {
 // 创建默认解码选项
 DecodeOptions* create_default_options();
 
+// Configures all fields of an existing decode options structure.
+void configure_decode_options(DecodeOptions* options, int formats, int try_harder,
+                              int try_rotate, int try_invert, int try_downscale);
+
 // 释放解码选项
 void free_options(DecodeOptions* options);
 
@@ -68,6 +72,10 @@ const char* get_last_error();
 // Decode barcode from raw image file data (PNG/JPEG/BMP etc.)
 // Used by wazero runtime which cannot access filesystem
 DecodeResult* decode_barcode_data(const unsigned char* file_data, int file_size, const DecodeOptions* options);
+
+// Decodes tightly packed raw pixels without an intermediate encoded image.
+DecodeResult* decode_barcode_pixels(const unsigned char* data, int width, int height,
+                                    int channels, const DecodeOptions* options);
 
 #ifdef __cplusplus
 }

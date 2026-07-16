@@ -141,6 +141,19 @@ EXPORT DecodeOptions* create_default_options() {
     return options;
 }
 
+// Configures all fields of an existing decode options structure.
+EXPORT void configure_decode_options(DecodeOptions* options, int formats, int try_harder,
+                                     int try_rotate, int try_invert, int try_downscale) {
+    if (!options) {
+        return;
+    }
+    options->formats = formats;
+    options->try_harder = try_harder;
+    options->try_rotate = try_rotate;
+    options->try_invert = try_invert;
+    options->try_downscale = try_downscale;
+}
+
 // 释放解码选项
 EXPORT void free_options(DecodeOptions* options) {
     delete options;
@@ -347,6 +360,83 @@ EXPORT DecodeResult* decode_barcode_data(const unsigned char* file_data, int fil
     return result;
 }
 
+// Decodes tightly packed raw pixels without an intermediate encoded image.
+EXPORT DecodeResult* decode_barcode_pixels(const unsigned char* data, int width, int height,
+                                           int channels, const DecodeOptions* options) {
+    if (!data || width <= 0 || height <= 0) {
+        set_error("Invalid raw image data or dimensions");
+        return nullptr;
+    }
+
+    auto formats = std::array{ImageFormat::None, ImageFormat::Lum, ImageFormat::LumA,
+                              ImageFormat::RGB, ImageFormat::RGBA};
+    if (channels < 1 || channels >= static_cast<int>(formats.size())) {
+        set_error("Unsupported channel count: %d", channels);
+        return nullptr;
+    }
+
+    try {
+        ImageView view(data, width, height, formats.at(channels));
+        ReaderOptions reader_opts;
+        if (options) {
+            reader_opts.setTryHarder(options->try_harder != 0);
+            reader_opts.setTryRotate(options->try_rotate != 0);
+            reader_opts.setTryInvert(options->try_invert != 0);
+            reader_opts.setTryDownscale(options->try_downscale != 0);
+
+            std::vector<ZXing::BarcodeFormat> selected_formats;
+            if (options->formats != FORMAT_ALL && options->formats != FORMAT_NONE) {
+                if (options->formats & FORMAT_QR_CODE) selected_formats.push_back(ZXing::BarcodeFormat::QRCode);
+                if (options->formats & FORMAT_AZTEC) selected_formats.push_back(ZXing::BarcodeFormat::Aztec);
+                if (options->formats & FORMAT_CODABAR) selected_formats.push_back(ZXing::BarcodeFormat::Codabar);
+                if (options->formats & FORMAT_CODE_39) selected_formats.push_back(ZXing::BarcodeFormat::Code39);
+                if (options->formats & FORMAT_CODE_93) selected_formats.push_back(ZXing::BarcodeFormat::Code93);
+                if (options->formats & FORMAT_CODE_128) selected_formats.push_back(ZXing::BarcodeFormat::Code128);
+                if (options->formats & FORMAT_DATA_MATRIX) selected_formats.push_back(ZXing::BarcodeFormat::DataMatrix);
+                if (options->formats & FORMAT_EAN_8) selected_formats.push_back(ZXing::BarcodeFormat::EAN8);
+                if (options->formats & FORMAT_EAN_13) selected_formats.push_back(ZXing::BarcodeFormat::EAN13);
+                if (options->formats & FORMAT_ITF) selected_formats.push_back(ZXing::BarcodeFormat::ITF);
+                if (options->formats & FORMAT_MAXICODE) selected_formats.push_back(ZXing::BarcodeFormat::MaxiCode);
+                if (options->formats & FORMAT_PDF_417) selected_formats.push_back(ZXing::BarcodeFormat::PDF417);
+                if (options->formats & FORMAT_UPC_A) selected_formats.push_back(ZXing::BarcodeFormat::UPCA);
+                if (options->formats & FORMAT_UPC_E) selected_formats.push_back(ZXing::BarcodeFormat::UPCE);
+                reader_opts.setFormats(ZXing::BarcodeFormats(std::move(selected_formats)));
+            }
+        }
+
+        auto barcode = ReadBarcode(view, reader_opts);
+        if (!barcode.isValid()) {
+            set_error("No barcode found");
+            return nullptr;
+        }
+
+        auto* result = new DecodeResult();
+        result->text = strdup(barcode.text().c_str());
+        if (!result->text) {
+            delete result;
+            set_error("Failed to allocate result text");
+            return nullptr;
+        }
+        result->format = convert_format(barcode.format());
+        result->confidence = 1.0f;
+        return result;
+    } catch (const std::exception& e) {
+        set_error("Decode error: %s", e.what());
+        return nullptr;
+    }
+}
+
+// Memory allocation wrappers for WASM export.
+// In Emscripten standalone mode, malloc/free may not be directly exportable,
+// so we provide thin wrappers that can be reliably exported.
+extern "C" EXPORT void* zxing_malloc(size_t size) {
+    return malloc(size);
+}
+
+extern "C" EXPORT void zxing_free(void* ptr) {
+    free(ptr);
+}
+
 // Empty main function required by Emscripten STANDALONE_WASM linker
 // Only include for WASM builds to avoid symbol conflict with CGO
 #ifdef __EMSCRIPTEN__
@@ -354,28 +444,3 @@ int main() {
     return 0;
 }
 #endif
-
-// Wrapper functions for memory management (exported for wazero)
-// Emscripten STANDALONE_WASM may inline malloc/free, so we provide explicit wrappers
-// Use a simple bump allocator from a static buffer
-static unsigned char zxing_alloc_buffer[16 * 1024 * 1024]; // 16MB buffer for image data
-static size_t zxing_alloc_offset = 0;
-
-extern "C" {
-
-EXPORT void* zxing_alloc(size_t size) {
-    // Align to 8 bytes
-    zxing_alloc_offset = (zxing_alloc_offset + 7) & ~7;
-    if (zxing_alloc_offset + size > sizeof(zxing_alloc_buffer)) {
-        zxing_alloc_offset = 0; // wrap around (single-use per decode call)
-    }
-    void* ptr = &zxing_alloc_buffer[zxing_alloc_offset];
-    zxing_alloc_offset += size;
-    return ptr;
-}
-
-EXPORT void zxing_alloc_reset() {
-    zxing_alloc_offset = 0;
-}
-
-} // extern "C"

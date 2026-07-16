@@ -207,3 +207,110 @@
   - 更新 `usageText` 说明 `CGO_ENABLED` 的三种取值
   - 为 `selectBuildEnv` 和 `hasPrebuiltLibs` 补充单元测试
 - 评审报告: `docs/superpowers/reviews/2026-07-05-cmd-build-implementation-review-2.md`
+
+### [2026-07-05] 代码复评 (三): `buildAll` 依赖缺失检测
+- 评审对象: 用户新增的 `isDepMissingError()` 和 `buildAll` 依赖跳过逻辑
+- 修复确认:
+  - ✅ `buildAll` 不再无条件跳过 lib/wasm 构建失败
+  - ✅ 仅当错误被识别为依赖缺失时才跳过
+  - ✅ 源码编译失败返回致命错误
+- 新增问题:
+  - `isDepMissingError` 依赖字符串匹配 (`executable file not found`, `no such file or directory`, `command not found`), 跨平台不可靠
+  - 深层错误可能包含 `no such file or directory` (如缺少头文件), 导致误判为依赖缺失
+  - Windows 下命令找不到的错误字符串与 Linux 不同, 字符串匹配可能失效
+- 建议:
+  - 使用 `errors.Is(err, exec.ErrNotFound)` 替代字符串匹配
+  - 在 `buildLib` 和 `buildWasm` 开头使用 `exec.LookPath` 显式检测 `cmake`/`emcmake`
+  - 对 EMSDK 未设置等场景定义自定义错误类型 (如 `errMissingDep`), 通过 `errors.As` 识别
+- 仍待处理问题: Windows 库命名不一致、`buildNonCGOEnv` 未清理 CGO_* 变量、usageText 未更新、`selectBuildEnv` 测试缺失
+- 评审报告: `docs/superpowers/reviews/2026-07-05-cmd-build-implementation-review-3.md`
+
+### [2026-07-05] 代码复评 (四): 依赖检测与 Windows 构建策略
+- 评审对象: 用户使用 `errors.As`/`exec.LookPath` 和 Windows MinGW + `.a` 策略修改后的 `build_go.go`/`build_lib.go`/`wasm_build.go`
+- 修复确认:
+  - ✅ 依赖检测改用 `errors.As(err, &errMissingDep{})` + `errors.Is(err, exec.ErrNotFound)`
+  - ✅ `buildLib` 开头检测 `cmake` 和 `makeCmd`
+  - ✅ `buildWasm` 开头检测 `EMSDK`、`emcmake`、`emmake`
+  - ✅ Windows 构建策略改为 MinGW + `.a`, 解决 MSVC/CGO 不兼容问题
+  - ✅ `build_lib.go` 去掉 Windows 特判, 代码更简洁
+- 新增问题:
+  - `env.go` 的 `hasPrebuiltLibs()` 在 Windows 上仍检查 `.lib`, 但 `build_lib.go` 现在生成 `.a`, 导致 Windows 下误判为无库
+- 设计决策建议:
+  - 更新生产就绪规格文档: Windows 库从 `ZXing.lib` 改为 `libZXing.a`
+  - README 说明 Windows 用户需安装 MinGW-w64 而非 MSVC
+  - CI 矩阵中 Windows 构建环境改用 MinGW
+- 建议:
+  - 将 `hasPrebuiltLibs` 改为统一检查 `.a`
+  - 将 `errMissingDep` 类型移到 `env.go` 或新建 `errors.go`
+  - 为 `isDepMissingError` 和 `errMissingDep` 补充单元测试
+  - 更新 `build_lib.go` 注释说明 Windows 使用 MinGW 的原因
+- 仍待处理问题: `buildNonCGOEnv` 未清理 CGO_* 变量、usageText 未更新、`selectBuildEnv` 测试缺失
+- 评审报告: `docs/superpowers/reviews/2026-07-05-cmd-build-implementation-review-4.md`
+
+### [2026-07-05] 最终评估: `cmd/build` 生产就绪状态
+- 评审对象: 经过多轮修复后的 `cmd/build` 完整状态
+- 测试结果: `go test ./cmd/build/... -count=1` 全部通过, 13 个测试全部通过 (1 个因环境有库而 SKIP)
+- 修复确认:
+  - ✅ `hasPrebuiltLibs` 改为统一检查 `.a`
+  - ✅ `errMissingDep` 移到独立 `errors.go`
+  - ✅ `buildNonCGOEnv` 清理所有 `CGO_*` 变量
+  - ✅ `usageText` 说明 `CGO_ENABLED` 行为
+  - ✅ `env_test.go` 新增 `selectBuildEnv`、`hasPrebuiltLibs`、`isDepMissingError` 等测试
+- 仍建议完成的工作:
+  - 更新生产就绪规格文档中 Windows 库命名 (`ZXing.lib` → `libZXing.a`) 和构建工具 (MSVC → MinGW)
+  - 更新 README.md 说明 Windows 需安装 MinGW-w64
+  - 更新 CI Windows runner 环境为 MinGW
+  - 确认 Docker 镜像与 zxing-cpp v3.0.2 / C++20 兼容
+- 评审报告: `docs/superpowers/reviews/2026-07-05-cmd-build-implementation-review-5.md`
+
+### [2026-07-05] 修正与复评 (六): Docker 与 `buildAll`
+- 用户反馈: Round 5 中第 4 点关于 Docker 的疑虑不当，因为项目核心目标是低版本 glibc 兼容，不能简单升级到高版本发行版
+- 修正结论:
+  - ✅ 使用 CentOS 7 + devtoolset-10 是维持 glibc 2.17 兼容的唯一可行方案
+  - ✅ `docker/patch_using_enum.sh` 是为 GCC 10 提供 C++20 `using enum` 支持的必要补偿
+  - ✅ `-DCMAKE_CXX_FLAGS=-fcoroutines` 是为 GCC 10 启用协程支持的必要补偿
+  - ✅ `docker_build.go` 和 `docker/Dockerfile.linux-build` 已正确实现上述方案，无需更改
+- `buildAll` 改进评审:
+  - ✅ 新增 `skipped` 计数器记录被跳过的步骤数量
+  - ✅ 根据是否跳过输出不同完成消息，避免误导
+  - ✅ 函数注释说明 `args` 仅传递给最终 go build 步骤
+- 撤销的疑虑: Round 5 中 "Docker 镜像是否已同步到支持 C++20 的环境" 表述不当，已撤销；实际方案已正确且必要
+- 评审报告: `docs/superpowers/reviews/2026-07-05-cmd-build-implementation-review-6.md`
+
+### [2026-07-05] GitHub Actions 配置检查
+- 检查对象: `.github/workflows/build.yml`, `.github/workflows/release.yml`, `.github/workflows/benchmark.yml`
+- 发现的问题:
+  - `docker-cgo-build` 中 GLIBC 版本检查正则 `'GLIBC_2\.(1[5-9]|[2-9])'` 会误报 `GLIBC_2.2` ~ `GLIBC_2.9` 以及 `GLIBC_2.2.5` / `GLIBC_2.3.4` 等低版本为不兼容
+- 修复:
+  - 将正则改为 `'GLIBC_2\.(1[5-9]|[2-9][0-9])'`, 仅匹配 `GLIBC_2.15` ~ `GLIBC_2.99`
+- 整体设计评价:
+  - ✅ Linux CGO / WASM / Windows CGO / Windows WASM 矩阵覆盖完整
+  - ✅ Docker 构建在 CentOS 7 中执行，确保 glibc 2.17 兼容
+  - ✅ Windows CGO 使用 MinGW-w64，与 `cmd/build` 策略一致
+  - ✅ 静态库路径使用 `.a` 文件，与当前实现一致
+- 可选改进:
+  - `release.yml` 未构建 Windows 二进制，仅打包 Windows 预编译库
+  - 未直接测试 `cmd/build` 端到端命令（如 `build-all` / `docker-build`）
+  - `benchmark.yml` 单次计时稳定性可提升
+- 评审报告: `docs/superpowers/reviews/2026-07-05-github-actions-review.md`
+
+## 1.0.0 Review Fix Analysis (2026-07-16)
+
+### Root cause of OOB
+- Old path: Go encodes RGBA->PNG, copies PNG into 16MiB static bump allocator in WASM, stb_image decodes PNG, zxing decodes
+- Bump allocator wraps without rejecting oversized alloc, reset before every call -> concurrent overwrites
+- stb_image in standalone WASM may also trigger OOB during PNG decode
+
+### Fix approach
+- New C ABI: decode_barcode_pixels(data, width, height, channels, options) constructs ImageView directly
+- Go uses standard guest malloc (via zxing_malloc wrapper) to allocate exact pixel buffer size
+- No PNG encoding, no stb_image, no bump allocator
+- Mutex serializes all guest-memory transactions
+- context.Context propagated to wazero with WithCloseOnContextDone(true)
+- configure_decode_options export sets all fields without struct offset dependency
+- Init failure: close runtime + compiled module on every error path
+- Close: idempotent, returns first error, clears all state
+
+### WASM export issue
+- Emscripten standalone mode does not reliably export malloc/free
+- Added extern "C" zxing_malloc/zxing_free wrappers with --export linker flags

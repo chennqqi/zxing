@@ -129,3 +129,16 @@
 
 - 针对用户根据首轮评审修改后的 `cmd/build/build_go.go` 及 `env.go`/`test.go` 进行复评
 - 评审报告保存至 `docs/superpowers/reviews/2026-07-05-cmd-build-implementation-review-2.md`
+
+## 1.0.0 Review Fix - wazero runtime (2026-07-16)
+
+- Fix WASM OOB: replace PNG+bump allocator path with raw-pixel decode_barcode_pixels ABI
+- Add mutex for concurrent safety in Runtime and wasmZXing
+- Propagate caller context.Context into wazero (WithCloseOnContextDone)
+- Proper resource cleanup on init failure (close runtime/compiled module)
+- Pass DecodeOptions (formats, try_harder, try_rotate, try_invert, try_downscale) through to WASM
+- EncodeText returns explicit "not implemented" error
+- Close returns underlying error, is idempotent
+- Upgrade wazero v1.8.0 -> v1.12.0
+- Add zxing_malloc/zxing_free C wrappers for reliable WASM export
+- Rebuild wasm/zxingwrapper.wasm
