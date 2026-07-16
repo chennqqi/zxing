@@ -4,24 +4,34 @@
 package wasm
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
-	"image"
-	"image/png"
 	"os"
+	"sync"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
+// DecodeOptions controls barcode decoding behavior in the WASM backend.
+type DecodeOptions struct {
+	Formats      int
+	TryHarder    bool
+	TryRotate    bool
+	TryInvert    bool
+	TryDownscale bool
+}
+
 // Runtime manages the wazero WASM runtime for ZXing.
+// A single Runtime instance is not safe for concurrent use;
+// callers must serialize access through the embedded mutex.
 type Runtime struct {
-	runtime wazero.Runtime
-	module  api.Module
-	ready   bool
+	mu       sync.Mutex
+	runtime  wazero.Runtime
+	module   api.Module
+	compiled wazero.CompiledModule
 }
 
 // DecodeResult holds the result of a barcode decode operation.
@@ -50,7 +60,10 @@ func NewRuntime() *Runtime {
 
 // Initialize loads and instantiates the WASM module from the given file path.
 func (r *Runtime) Initialize(ctx context.Context, wasmPath string) error {
-	if r.ready {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.module != nil && !r.module.IsClosed() {
 		return nil
 	}
 
@@ -59,116 +72,112 @@ func (r *Runtime) Initialize(ctx context.Context, wasmPath string) error {
 		return fmt.Errorf("failed to read WASM file %s: %w", wasmPath, err)
 	}
 
-	r.runtime = wazero.NewRuntime(ctx)
+	config := wazero.NewRuntimeConfig().WithCloseOnContextDone(true)
+	r.runtime = wazero.NewRuntimeWithConfig(ctx, config)
 
 	// Instantiate WASI host functions (required by Emscripten STANDALONE_WASM)
-	wasi_snapshot_preview1.MustInstantiate(ctx, r.runtime)
+	if _, err := wasi_snapshot_preview1.Instantiate(ctx, r.runtime); err != nil {
+		r.runtime.Close(context.Background())
+		r.runtime = nil
+		return fmt.Errorf("failed to instantiate WASI: %w", err)
+	}
 
 	// Compile the WASM binary
-	compiled, err := r.runtime.CompileModule(ctx, wasmBytes)
+	r.compiled, err = r.runtime.CompileModule(ctx, wasmBytes)
 	if err != nil {
+		r.runtime.Close(context.Background())
+		r.runtime = nil
 		return fmt.Errorf("failed to compile WASM module: %w", err)
 	}
 
 	// Instantiate the WASM module
 	// Disable _start to prevent proc_exit from being called automatically
-	r.module, err = r.runtime.InstantiateModule(ctx, compiled, wazero.NewModuleConfig().WithStartFunctions())
+	r.module, err = r.runtime.InstantiateModule(ctx, r.compiled, wazero.NewModuleConfig().WithStartFunctions())
 	if err != nil {
+		r.compiled.Close(context.Background())
+		r.runtime.Close(context.Background())
+		r.runtime = nil
+		r.compiled = nil
 		return fmt.Errorf("failed to instantiate WASM module: %w", err)
 	}
 
-	r.ready = true
 	return nil
 }
 
-// IsReady returns whether the runtime has been initialized.
+// IsReady returns whether the runtime has been initialized and the module is still usable.
 func (r *Runtime) IsReady() bool {
-	return r.ready
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.module != nil && !r.module.IsClosed()
 }
 
-// DecodeImage decodes image data (RGBA format) using the WASM module.
-// The data parameter should be RGBA pixel data with the given width and height.
-func (r *Runtime) DecodeImage(data []byte, width, height, channels int) (*DecodeResult, error) {
-	if !r.ready {
-		return nil, fmt.Errorf("WASM runtime not initialized")
+// DecodeImage decodes raw pixel data using the WASM module's decode_barcode_pixels export.
+// The data parameter must be tightly packed pixel data with the given width, height, and channels.
+// channels must be 1 (grayscale), 2 (grayscale+alpha), 3 (RGB), or 4 (RGBA).
+func (r *Runtime) DecodeImage(ctx context.Context, data []byte, width, height, channels int, opts *DecodeOptions) (*DecodeResult, error) {
+	if err := validateDecodeInput(data, width, height, channels); err != nil {
+		return nil, err
 	}
 
-	// Encode RGBA data to PNG in Go (WASM's stb_image can decode PNG from memory)
-	pngData, err := encodeRGBAtoPNG(data, width, height, channels)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode PNG: %w", err)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.module == nil || r.module.IsClosed() {
+		return nil, fmt.Errorf("WASM runtime not initialized or closed")
 	}
 
-	ctx := context.Background()
-	allocFn := r.module.ExportedFunction("zxing_alloc")
-
-	if allocFn == nil {
-		return nil, fmt.Errorf("zxing_alloc not exported in WASM module")
-	}
-
-	// Reset bump allocator before use
-	if resetFn := r.module.ExportedFunction("zxing_alloc_reset"); resetFn != nil {
-		resetFn.Call(ctx)
-	}
-
-	// Allocate memory for PNG data in WASM
-	ptrRes, err := allocFn.Call(ctx, uint64(len(pngData)))
-	if err != nil {
-		return nil, fmt.Errorf("failed to allocate WASM memory: %w", err)
-	}
-	pngPtr := uint32(ptrRes[0])
-
-	// Write PNG data to WASM memory
 	mem := r.module.Memory()
-	if !mem.Write(pngPtr, pngData) {
-		return nil, fmt.Errorf("failed to write PNG data to WASM memory")
+	if mem == nil {
+		return nil, fmt.Errorf("WASM module has no exported memory")
 	}
 
-	// Create default decode options
-	optsRes, err := r.module.ExportedFunction("create_default_options").Call(ctx)
+	// Allocate guest memory for pixel data
+	pixelSize := width * height * channels
+	pixelPtr, err := r.guestMalloc(ctx, uint64(pixelSize))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create options: %w", err)
+		return nil, err
 	}
-	optsPtr := optsRes[0]
-	if optsPtr == 0 {
-		return nil, fmt.Errorf("failed to allocate decode options")
-	}
-	defer r.module.ExportedFunction("free_options").Call(ctx, optsPtr)
+	defer r.guestFree(ctx, pixelPtr)
 
-	// Call decode_barcode_data(pngPtr, pngLen, optsPtr)
-	decodeFn := r.module.ExportedFunction("decode_barcode_data")
+	// Write pixel data into guest memory
+	if !mem.Write(pixelPtr, data[:pixelSize]) {
+		return nil, fmt.Errorf("failed to write pixel data to WASM memory")
+	}
+
+	// Allocate and configure decode options
+	optsPtr, err := r.guestCreateOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer r.guestFreeOptions(ctx, optsPtr)
+
+	if err := r.guestConfigureOptions(ctx, optsPtr, opts); err != nil {
+		return nil, err
+	}
+
+	// Call decode_barcode_pixels(data, width, height, channels, options)
+	decodeFn := r.module.ExportedFunction("decode_barcode_pixels")
 	if decodeFn == nil {
-		return nil, fmt.Errorf("decode_barcode_data not exported in WASM module")
+		return nil, fmt.Errorf("decode_barcode_pixels not exported in WASM module")
 	}
 
-	resultRes, err := decodeFn.Call(ctx, uint64(pngPtr), uint64(len(pngData)), optsPtr)
+	resultRes, err := decodeFn.Call(ctx, uint64(pixelPtr), uint64(width), uint64(height), uint64(channels), uint64(optsPtr))
 	if err != nil {
-		return nil, fmt.Errorf("WASM decode_barcode_data call failed: %w", err)
+		// Cancellation may close the module; mark it unusable
+		if ctx.Err() != nil {
+			r.module = nil
+		}
+		return nil, fmt.Errorf("WASM decode_barcode_pixels call failed: %w", err)
 	}
 	resultPtr := uint32(resultRes[0])
 
 	if resultPtr == 0 {
-		// Get error message from get_last_error
-		errFn := r.module.ExportedFunction("get_last_error")
-		if errFn != nil {
-			errRes, _ := errFn.Call(ctx)
-			if errRes != nil && errRes[0] != 0 {
-				errBytes, ok := mem.Read(uint32(errRes[0]), 256)
-				if ok {
-					return nil, fmt.Errorf("WASM decode error: %s", cString(errBytes))
-				}
-			}
-		}
-		return nil, fmt.Errorf("WASM decode failed with no error message")
+		errMsg := r.guestLastError(ctx, mem)
+		return nil, fmt.Errorf("WASM decode failed: %s", errMsg)
 	}
-	defer r.module.ExportedFunction("free_result").Call(ctx, uint64(resultPtr))
+	defer r.guestFreeResult(ctx, resultPtr)
 
-	// Read DecodeResult struct from WASM memory
-	// C struct layout (wasm32, 4-byte aligned):
-	//   char* text;        // 4 bytes (pointer)
-	//   BarcodeFormat format; // 4 bytes (enum/int)
-	//   float confidence;  // 4 bytes
-	// Total: 12 bytes
+	// Read DecodeResult struct from WASM memory (wasm32, 12 bytes)
 	resultBytes, ok := mem.Read(resultPtr, 12)
 	if !ok {
 		return nil, fmt.Errorf("failed to read result struct from WASM memory")
@@ -177,7 +186,7 @@ func (r *Runtime) DecodeImage(data []byte, width, height, channels int) (*Decode
 	textPtr := binary.LittleEndian.Uint32(resultBytes[0:4])
 	formatVal := int32(binary.LittleEndian.Uint32(resultBytes[4:8]))
 
-	// Read text string (null-terminated)
+	// Read text string (null-terminated, bounded read)
 	text := ""
 	if textPtr != 0 {
 		textBytes, ok := mem.Read(textPtr, 4096)
@@ -193,37 +202,141 @@ func (r *Runtime) DecodeImage(data []byte, width, height, channels int) (*Decode
 	}, nil
 }
 
-// encodeRGBAtoPNG encodes raw pixel data to PNG format.
-func encodeRGBAtoPNG(data []byte, width, height, channels int) ([]byte, error) {
-	if channels == 4 {
-		img := image.NewRGBA(image.Rect(0, 0, width, height))
-		copy(img.Pix, data)
-		var buf bytes.Buffer
-		if err := png.Encode(&buf, img); err != nil {
-			return nil, err
-		}
-		return buf.Bytes(), nil
-	} else if channels == 3 {
-		img := image.NewRGBA(image.Rect(0, 0, width, height))
-		for y := 0; y < height; y++ {
-			for x := 0; x < width; x++ {
-				idx := (y*width + x) * 3
-				pixIdx := (y*width + x) * 4
-				if idx+2 < len(data) {
-					img.Pix[pixIdx] = data[idx]
-					img.Pix[pixIdx+1] = data[idx+1]
-					img.Pix[pixIdx+2] = data[idx+2]
-					img.Pix[pixIdx+3] = 255
-				}
-			}
-		}
-		var buf bytes.Buffer
-		if err := png.Encode(&buf, img); err != nil {
-			return nil, err
-		}
-		return buf.Bytes(), nil
+// validateDecodeInput checks pixel data, dimensions, and channels before entering WASM.
+func validateDecodeInput(data []byte, width, height, channels int) error {
+	if len(data) == 0 {
+		return fmt.Errorf("empty image data")
 	}
-	return nil, fmt.Errorf("unsupported channel count: %d", channels)
+	if width <= 0 || height <= 0 {
+		return fmt.Errorf("invalid dimensions: width=%d, height=%d", width, height)
+	}
+	if channels < 1 || channels > 4 {
+		return fmt.Errorf("unsupported channel count: %d (must be 1-4)", channels)
+	}
+	// Check for integer overflow: width * height * channels
+	if width > (1<<30)/height/channels {
+		return fmt.Errorf("image dimensions overflow: %dx%dx%d", width, height, channels)
+	}
+	expected := width * height * channels
+	if len(data) < expected {
+		return fmt.Errorf("data too short: have %d bytes, need %d", len(data), expected)
+	}
+	return nil
+}
+
+// guestMalloc allocates memory in the WASM guest via the zxing_malloc export.
+func (r *Runtime) guestMalloc(ctx context.Context, size uint64) (uint32, error) {
+	fn := r.module.ExportedFunction("zxing_malloc")
+	if fn == nil {
+		return 0, fmt.Errorf("zxing_malloc not exported in WASM module")
+	}
+	res, err := fn.Call(ctx, size)
+	if err != nil {
+		return 0, fmt.Errorf("failed to allocate WASM memory: %w", err)
+	}
+	ptr := uint32(res[0])
+	if ptr == 0 {
+		return 0, fmt.Errorf("WASM malloc returned null for size %d", size)
+	}
+	return ptr, nil
+}
+
+// guestFree releases guest memory allocated by guestMalloc.
+func (r *Runtime) guestFree(ctx context.Context, ptr uint32) {
+	if fn := r.module.ExportedFunction("zxing_free"); fn != nil {
+		fn.Call(ctx, uint64(ptr))
+	}
+}
+
+// guestCreateOptions allocates a default DecodeOptions struct in guest memory.
+func (r *Runtime) guestCreateOptions(ctx context.Context) (uint32, error) {
+	fn := r.module.ExportedFunction("create_default_options")
+	if fn == nil {
+		return 0, fmt.Errorf("create_default_options not exported in WASM module")
+	}
+	res, err := fn.Call(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create decode options: %w", err)
+	}
+	ptr := uint32(res[0])
+	if ptr == 0 {
+		return 0, fmt.Errorf("WASM create_default_options returned null")
+	}
+	return ptr, nil
+}
+
+// guestFreeOptions releases a DecodeOptions struct in guest memory.
+func (r *Runtime) guestFreeOptions(ctx context.Context, ptr uint32) {
+	if fn := r.module.ExportedFunction("free_options"); fn != nil {
+		fn.Call(ctx, uint64(ptr))
+	}
+}
+
+// guestConfigureOptions writes all DecodeOptions fields via the configure_decode_options export.
+func (r *Runtime) guestConfigureOptions(ctx context.Context, optsPtr uint32, opts *DecodeOptions) error {
+	fn := r.module.ExportedFunction("configure_decode_options")
+	if fn == nil {
+		return fmt.Errorf("configure_decode_options not exported in WASM module")
+	}
+	formats := 0xFFFF // FORMAT_ALL
+	tryHarder := 1
+	tryRotate := 1
+	tryInvert := 0
+	tryDownscale := 1
+	if opts != nil {
+		if opts.Formats != 0 {
+			formats = opts.Formats
+		}
+		if opts.TryHarder {
+			tryHarder = 1
+		} else {
+			tryHarder = 0
+		}
+		if opts.TryRotate {
+			tryRotate = 1
+		} else {
+			tryRotate = 0
+		}
+		if opts.TryInvert {
+			tryInvert = 1
+		} else {
+			tryInvert = 0
+		}
+		if opts.TryDownscale {
+			tryDownscale = 1
+		} else {
+			tryDownscale = 0
+		}
+	}
+	_, err := fn.Call(ctx, uint64(optsPtr), uint64(formats), uint64(tryHarder), uint64(tryRotate), uint64(tryInvert), uint64(tryDownscale))
+	if err != nil {
+		return fmt.Errorf("failed to configure decode options: %w", err)
+	}
+	return nil
+}
+
+// guestFreeResult releases a DecodeResult struct in guest memory.
+func (r *Runtime) guestFreeResult(ctx context.Context, ptr uint32) {
+	if fn := r.module.ExportedFunction("free_result"); fn != nil {
+		fn.Call(ctx, uint64(ptr))
+	}
+}
+
+// guestLastError reads the last error string from the WASM module.
+func (r *Runtime) guestLastError(ctx context.Context, mem api.Memory) string {
+	fn := r.module.ExportedFunction("get_last_error")
+	if fn == nil {
+		return "unknown error (get_last_error not exported)"
+	}
+	res, err := fn.Call(ctx)
+	if err != nil || res == nil || res[0] == 0 {
+		return "unknown error"
+	}
+	errBytes, ok := mem.Read(uint32(res[0]), 256)
+	if !ok {
+		return "failed to read error message"
+	}
+	return cString(errBytes)
 }
 
 // cString reads a null-terminated C string from a byte slice.
@@ -277,26 +390,29 @@ func formatToString(format int) string {
 }
 
 // EncodeText encodes text to a barcode image using the WASM module.
-// This is a PoC stub — full implementation in later tasks.
+// WASM encoding is not implemented yet; this always returns an error.
 func (r *Runtime) EncodeText(text string, width, height int) (*EncodeResult, error) {
-	if !r.ready {
-		return nil, fmt.Errorf("WASM runtime not initialized")
-	}
-	return &EncodeResult{
-		Success:      false,
-		ErrorCode:    -1,
-		ErrorMessage: "PoC: encode not fully implemented yet",
-	}, nil
+	return nil, fmt.Errorf("WASM encode is not implemented")
 }
 
-// Close releases all WASM runtime resources.
+// Close releases all WASM runtime resources. It is idempotent.
 func (r *Runtime) Close() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var firstErr error
+	if r.compiled != nil {
+		if err := r.compiled.Close(context.Background()); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		r.compiled = nil
+	}
 	if r.runtime != nil {
-		ctx := context.Background()
-		r.runtime.Close(ctx)
+		if err := r.runtime.Close(context.Background()); err != nil && firstErr == nil {
+			firstErr = err
+		}
 		r.runtime = nil
 	}
 	r.module = nil
-	r.ready = false
-	return nil
+	return firstErr
 }

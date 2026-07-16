@@ -426,6 +426,17 @@ EXPORT DecodeResult* decode_barcode_pixels(const unsigned char* data, int width,
     }
 }
 
+// Memory allocation wrappers for WASM export.
+// In Emscripten standalone mode, malloc/free may not be directly exportable,
+// so we provide thin wrappers that can be reliably exported.
+extern "C" EXPORT void* zxing_malloc(size_t size) {
+    return malloc(size);
+}
+
+extern "C" EXPORT void zxing_free(void* ptr) {
+    free(ptr);
+}
+
 // Empty main function required by Emscripten STANDALONE_WASM linker
 // Only include for WASM builds to avoid symbol conflict with CGO
 #ifdef __EMSCRIPTEN__
