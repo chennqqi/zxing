@@ -66,6 +66,13 @@ func TestWazeroDecodeQRCode(t *testing.T) {
 	if len(result.Text) == 0 {
 		t.Fatal("Decoded text should not be empty")
 	}
+	const wantText = "https://www.bing.com/search?q=%E8%8D%89%E6%96%99%E4%BA%8C%E7%BB%B4%E7%A0%81&form=ANNTH1&refig=68b4203083f6401eaa87806307e4db8b&pc=CNNDDB&adppc=EDGEXST"
+	if result.Text != wantText {
+		t.Fatalf("unexpected decoded text: %q", result.Text)
+	}
+	if result.Format != "QR_CODE" {
+		t.Fatalf("unexpected decoded format: %q", result.Format)
+	}
 
 	t.Logf("Decoded text: %s, format: %s", result.Text, result.Format)
 }
