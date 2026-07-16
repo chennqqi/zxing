@@ -14,7 +14,7 @@ The current data path converts raw pixels to PNG in Go, copies the PNG into a gu
 
 The module contains additional shared state, including its allocator and last-error buffer. A single module instance therefore cannot execute independent decode calls concurrently.
 
-The implementation must remain compatible with the repository's pure-Go fallback and must not change the Linux glibc static-library build process.
+The implementation must remain compatible with the repository's pure-Go fallback and must not change the Linux glibc static-library build process. The wazero dependency is upgraded from v1.8.0 to v1.12.0 as part of this work.
 
 ## Architecture
 
@@ -31,6 +31,8 @@ The custom static bump buffer and its reset function are removed from the wazero
 `Runtime` owns a mutex protecting initialization, guest calls, readiness checks, and close. A decode call holds this lock for the complete guest-memory transaction because guest memory and C++ globals are shared.
 
 Initialization creates the wazero runtime with context-aware termination enabled. It uses error-returning WASI initialization and records the compiled module so that explicit cleanup is possible. Every partial-failure path closes resources before returning.
+
+The implementation uses the non-deprecated wazero v1.12.0 APIs. `go.mod` records wazero as a direct dependency, and `go mod tidy` updates module metadata after the upgrade.
 
 If cancellation closes a module, the runtime is marked unusable and its wazero resources are released. The public backend's lazy initializer checks readiness as well as a nil pointer, so a later operation initializes a fresh runtime rather than calling a closed module.
 
@@ -70,6 +72,7 @@ Coverage includes:
 - Initialization failure followed by cleanup.
 - Repeated and concurrent `Close` calls.
 - Detection of missing required exports where practical.
+- Compatibility with wazero v1.12.0 and a tidy module graph.
 
 Verification commands are:
 
@@ -87,4 +90,3 @@ The WASM module is rebuilt with the repository's supported Emscripten workflow a
 - Introducing a module pool or parallel guest execution.
 - Changing CGO backend selection or supported platforms.
 - Changing the Linux static-library build environment.
-- Upgrading wazero unless the existing supported version blocks the required lifecycle behavior.
