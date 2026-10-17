@@ -89,6 +89,11 @@ static ::BarcodeFormat convert_format(ZXing::BarcodeFormat format) {
         case ZXing::BarcodeFormat::MicroQRCode: return FORMAT_QR_CODE; // 使用QRCode作为替代
         case ZXing::BarcodeFormat::RMQRCode: return FORMAT_QR_CODE; // 使用QRCode作为替代
         case ZXing::BarcodeFormat::DXFilmEdge: return FORMAT_CODE_128; // 使用Code128作为替代
+        case ZXing::BarcodeFormat::MicroPDF417: return FORMAT_PDF_417; // PDF417变体，使用PDF417作为替代
+        // Telepen（含Alpha/Numeric变体）在C枚举中无对应格式，返回FORMAT_NONE
+        case ZXing::BarcodeFormat::Telepen: return FORMAT_NONE;
+        case ZXing::BarcodeFormat::TelepenAlpha: return FORMAT_NONE;
+        case ZXing::BarcodeFormat::TelepenNumeric: return FORMAT_NONE;
         default: return FORMAT_NONE;
     }
 }

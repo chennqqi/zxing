@@ -30,7 +30,7 @@ glibc is backward compatible: a binary compiled against glibc 2.17 runs on any s
 
 ### GCC 10 Patches
 
-GCC 10 does not support two C++20 features used by zxing-cpp v3.0.2:
+GCC 10 does not support two C++20 features used by zxing-cpp v3.1.1:
 
 1. **`using enum`** (P0648R2, GCC 11+): Patched by `docker/patch_using_enum.sh`, which replaces `using enum BarcodeFormat;` with `static constexpr auto` declarations.
 2. **Coroutines**: Enabled via `-DCMAKE_CXX_FLAGS=-fcoroutines` CMake flag.
