@@ -172,20 +172,23 @@ jobs:
           path: lib/windows-arm64/
           if-no-files-found: error
 
-  # macOS: native clang build on both architectures. macos-13 is an Intel
-  # runner (darwin-x64); macos-15 is Apple Silicon (darwin-arm64).
+  # macOS: both architectures build on the Apple Silicon runner (macos-15).
+  # clang is multi-arch, so darwin-x64 is cross-compiled with
+  # -DCMAKE_OSX_ARCHITECTURES=x86_64. This avoids the macos-13 (Intel)
+  # runner's long queue times. The x64 leg can only run CGO tests if the
+  # runner happens to have Rosetta installed; otherwise it builds only.
   darwin:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-13
-            libdir: darwin-x64
+          - libdir: darwin-x64
             arch: x86_64
-          - runner: macos-15
-            libdir: darwin-arm64
+            goarch: amd64
+          - libdir: darwin-arm64
             arch: arm64
-    runs-on: ${{ matrix.runner }}
+            goarch: arm64
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
         with:
@@ -208,11 +211,24 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The x86_64 leg cross-compiles on an arm64 runner: GOARCH=amd64 makes
+      # Go emit x86_64 objects and CC/CXX carry -arch x86_64 so the cgo C
+      # compiler matches. Execution tests need Rosetta; skip if absent.
       - name: Test CGO backend (macOS, clang)
+        env:
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          CGO_ENABLED=1 go test -buildvcs=false -v ./pkg/zxing/...
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            export CC="clang -arch x86_64"
+            export CXX="clang++ -arch x86_64"
+          fi
           CGO_ENABLED=1 go build -buildvcs=false -o zxing-cli ./cmd/zxing-cli
-          ./zxing-cli -i testdata/qrcode_test.png --try-harder
+          if [ "${{ matrix.arch }}" = "arm64" ] || arch -x86_64 /usr/bin/true 2>/dev/null; then
+            CGO_ENABLED=1 go test -buildvcs=false -v ./pkg/zxing/...
+            ./zxing-cli -i testdata/qrcode_test.png --try-harder
+          else
+            echo "Rosetta not available; skipping execution tests for x86_64 build"
+          fi
 
       - name: Generate BUILDINFO
         run: |
