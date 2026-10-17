@@ -183,6 +183,7 @@ jobs:
 
       - name: Setup MSYS2 CLANGARM64
         uses: msys2/setup-msys2@v2
+        id: msys2
         with:
           msystem: CLANGARM64
           install: >-
@@ -192,13 +193,15 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # msys2 {0} shell runs inside CLANGARM64 with the right PATH; MSYS2 is
-      # extracted under RUNNER_TEMP on this image, not C:/msys64.
+      # MSYS2 is extracted under RUNNER_TEMP on this image, not C:/msys64 —
+      # pin CC/CXX to CLANGARM64's clang via the msys2-location output.
+      # -static links the C++ runtime so the release binary has no MinGW
+      # DLL dependencies.
       - name: Build CLI (CGO backend)
-        shell: msys2 {0}
+        shell: bash
         env:
-          CC: clang
-          CXX: clang++
+          CC: ${{ steps.msys2.outputs.msys2-location }}/clangarm64/bin/clang.exe
+          CXX: ${{ steps.msys2.outputs.msys2-location }}/clangarm64/bin/clang++.exe
           CGO_LDFLAGS: -static
         run: |
           CGO_ENABLED=1 \

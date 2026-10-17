@@ -91,6 +91,7 @@ jobs:
 
       - name: Setup MSYS2 CLANGARM64
         uses: msys2/setup-msys2@v2
+        id: msys2
         with:
           msystem: CLANGARM64
           install: >-
@@ -124,13 +125,15 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # -static links libc++/libunwind/winpthreads statically so the test
-      # binary does not depend on runtime DLLs resolving correctly via PATH.
+      # Git bash has `go` on PATH (the msys2 login shell does not inherit it),
+      # so CGO steps run in Git bash with CC/CXX pinned to CLANGARM64's clang
+      # via the action's msys2-location output. -static links libc++/libunwind/
+      # winpthreads statically so binaries do not depend on PATH DLL lookup.
       - name: Test CGO backend (windows/arm64, clang)
-        shell: msys2 {0}
+        shell: bash
         env:
-          CC: clang
-          CXX: clang++
+          CC: ${{ steps.msys2.outputs.msys2-location }}/clangarm64/bin/clang.exe
+          CXX: ${{ steps.msys2.outputs.msys2-location }}/clangarm64/bin/clang++.exe
           CGO_LDFLAGS: -static
         run: |
           CGO_ENABLED=1 go test -buildvcs=false -v ./pkg/zxing/...
