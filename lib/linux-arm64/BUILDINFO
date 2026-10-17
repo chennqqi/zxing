@@ -1,0 +1,12 @@
+Build: Linux arm64 (native aarch64, Rocky Linux 8 container)
+Date: 2026-10-17
+zxing-cpp: 287c85d
+Builder: Rocky Linux 8 (glibc 2.28) + gcc-toolset-12 (GCC 12)
+Toolchain: docker/Dockerfile.linux-arm64-build
+CMake: -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_FLAGS=-fcoroutines
+Format: ELF aarch64 (Linux static archive, glibc 2.28 compatible)
+Libraries:
+  libZXing.a - ZXing-CPP core static library (3056746 bytes)
+    SHA-256: 0d9ce44df3304205306479dc76dc614efada8117cf0f6e081ac5ed890d098136
+  libzxingwrapper.a - CGO wrapper static library (187012 bytes)
+    SHA-256: 9fa7f97ecf27e47814493c50e8ccb3a6f3046102952033d610d0054e9d38ddbf

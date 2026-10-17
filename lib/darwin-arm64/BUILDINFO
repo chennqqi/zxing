@@ -1,0 +1,12 @@
+Build: macOS arm64 (native clang,  runner)
+Date: 2026-10-17
+zxing-cpp: 287c85d
+Builder: GitHub  + Xcode clang
+Toolchain: .github/workflows/build-libs.yml
+CMake: -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+Format: Mach-O arm64 (macOS static archive, libc++, min macOS 12.0)
+Libraries:
+  libZXing.a - ZXing-CPP core static library (2342512 bytes)
+    SHA-256: 31f6f081b08039e370242bcfb074325ffc89bd41297cf63be472a1dc08c8f3fe
+  libzxingwrapper.a - CGO wrapper static library (169024 bytes)
+    SHA-256: 952022005e3680b84087015e64cebf545ae1a9fbb6320ba5c664a03d6c1f963e

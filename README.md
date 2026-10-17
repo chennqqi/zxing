@@ -1,5 +1,7 @@
 # ZXing Go
 
+[![Release](https://github.com/chennqqi/zxing/actions/workflows/release.yml/badge.svg)](https://github.com/chennqqi/zxing/actions/workflows/release.yml)
+
 基于 [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) 的 Go 语言条码识别库，支持 CGO 和 WASM (wazero) 双后端。
 
 ## 功能特性

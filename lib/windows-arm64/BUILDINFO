@@ -1,0 +1,12 @@
+Build: Windows arm64 (clang aarch64, MSYS2 CLANGARM64)
+Date: 2026-10-17
+zxing-cpp: 287c85d
+Builder: windows-11-arm runner + MSYS2 CLANGARM64 (llvm-mingw clang)
+Toolchain: .github/workflows/build-libs.yml
+CMake: -G Ninja -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
+Format: PE aarch64 (Windows static archive, libc++)
+Libraries:
+  libZXing.a - ZXing-CPP core static library (2969150 bytes)
+    SHA-256: 02a55109c9812fcab817a7d11b376d555ba75f10cd9753c8dfb1c0ed07166930
+  libzxingwrapper.a - CGO wrapper static library (160718 bytes)
+    SHA-256: 7401dccb714c0c71a44f274851c84a6dcb111c9d8933f83c9b4e03c8267f5452

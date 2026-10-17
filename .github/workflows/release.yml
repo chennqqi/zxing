@@ -131,17 +131,21 @@ jobs:
           path: release-assets/zxing-cli-linux-arm64
           if-no-files-found: error
 
-  # macOS CLIs on both architectures (Intel runner + Apple Silicon runner)
+  # macOS CLIs on both architectures, both built on the Apple Silicon runner
+  # (x64 is cross-compiled; avoids the macos-13 Intel queue). The x64 CGO
+  # binary is only executed when Rosetta is available.
   release-macos:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-13
-            arch: x64
-          - runner: macos-15
-            arch: arm64
-    runs-on: ${{ matrix.runner }}
+          - arch: x64
+            goarch: amd64
+            clang_arch: x86_64
+          - arch: arm64
+            goarch: arm64
+            clang_arch: arm64
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
         with:
@@ -152,18 +156,30 @@ jobs:
           go-version-file: go.mod
 
       - name: Build CLI (CGO backend)
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          CC: clang -arch ${{ matrix.clang_arch }}
+          CXX: clang++ -arch ${{ matrix.clang_arch }}
         run: |
           CGO_ENABLED=1 \
           go build -buildvcs=false -o zxing-cli-darwin-${{ matrix.arch }} ./cmd/zxing-cli
 
       - name: Build CLI (WASM backend)
+        env:
+          GOARCH: ${{ matrix.goarch }}
         run: |
           CGO_ENABLED=0 go build -buildvcs=false -o zxing-cli-darwin-${{ matrix.arch }}-wasm ./cmd/zxing-cli
 
       - name: Test before release
         run: |
-          ./zxing-cli-darwin-${{ matrix.arch }} -i testdata/qrcode_test.png --try-harder
-          ./zxing-cli-darwin-${{ matrix.arch }}-wasm -i testdata/qrcode_test.png --try-harder --backend wasm
+          if [ "${{ matrix.arch }}" = "arm64" ] || arch -x86_64 /usr/bin/true 2>/dev/null; then
+            ./zxing-cli-darwin-${{ matrix.arch }} -i testdata/qrcode_test.png --try-harder
+          else
+            echo "Rosetta not available; skipping CGO CLI execution for x64"
+          fi
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            ./zxing-cli-darwin-${{ matrix.arch }}-wasm -i testdata/qrcode_test.png --try-harder --backend wasm
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
