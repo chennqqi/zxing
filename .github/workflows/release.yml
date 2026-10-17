@@ -188,22 +188,19 @@ jobs:
           install: >-
             mingw-w64-clang-aarch64-toolchain
 
-      - name: Add CLANGARM64 to PATH
-        shell: bash
-        run: echo "C:/msys64/clangarm64/bin" >> $GITHUB_PATH
-
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
+      # msys2 {0} shell runs inside CLANGARM64 with the right PATH; MSYS2 is
+      # extracted under RUNNER_TEMP on this image, not C:/msys64.
       - name: Build CLI (CGO backend)
-        shell: bash
+        shell: msys2 {0}
         env:
           CC: clang
           CXX: clang++
           CGO_LDFLAGS: -static
         run: |
-          export PATH="/c/msys64/clangarm64/bin:$PATH"
           CGO_ENABLED=1 \
           go build -buildvcs=false -o zxing-cli-windows-arm64.exe ./cmd/zxing-cli
 

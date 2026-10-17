@@ -98,18 +98,15 @@ jobs:
             mingw-w64-clang-aarch64-cmake
             mingw-w64-clang-aarch64-ninja
 
-      - name: Add CLANGARM64 to PATH
-        shell: bash
-        run: echo "C:/msys64/clangarm64/bin" >> $GITHUB_PATH
-
-      # The runner image ships its own MSVC-ABI clang (C:/Program Files/LLVM)
-      # which shadows MSYS2's clang in PATH. Export PATH explicitly inside the
-      # step so `clang` resolves to CLANGARM64's aarch64-w64-mingw32 clang;
-      # the MSVC clang would emit ZXing.lib (MSVC ABI) instead of libZXing.a.
+      # MSYS2 is NOT preinstalled at C:/msys64 on windows-11-arm; setup-msys2
+      # extracts it under RUNNER_TEMP. Use its `msys2 {0}` shell so steps run
+      # inside the CLANGARM64 environment with the right PATH, instead of
+      # guessing an install path. Without this, `clang` resolves to the
+      # image's MSVC-ABI LLVM (C:/Program Files/LLVM) which emits
+      # ZXing.lib/.obj (MSVC ABI) instead of libZXing.a/.o (MinGW ABI).
       - name: Build static libraries (clang aarch64)
-        shell: bash
+        shell: msys2 {0}
         run: |
-          export PATH="/c/msys64/clangarm64/bin:$PATH"
           which clang clang++ cmake ninja
           clang++ --version
           mkdir -p lib/windows-arm64
@@ -130,13 +127,12 @@ jobs:
       # -static links libc++/libunwind/winpthreads statically so the test
       # binary does not depend on runtime DLLs resolving correctly via PATH.
       - name: Test CGO backend (windows/arm64, clang)
-        shell: bash
+        shell: msys2 {0}
         env:
           CC: clang
           CXX: clang++
           CGO_LDFLAGS: -static
         run: |
-          export PATH="/c/msys64/clangarm64/bin:$PATH"
           CGO_ENABLED=1 go test -buildvcs=false -v ./pkg/zxing/...
           CGO_ENABLED=1 go build -buildvcs=false -o zxing-cli.exe ./cmd/zxing-cli
           ./zxing-cli.exe -i testdata/qrcode_test.png --try-harder
