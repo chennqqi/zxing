@@ -1,13 +1,31 @@
-//go:build cgo && linux
+//go:build cgo && (linux || windows || darwin)
 
-// Package zxing CGO binding for Linux platform.
-// This file provides the Cgo declarations and type definitions specific to Linux.
+// Package zxing CGO binding for Linux, Windows and macOS platforms.
+// This file provides the Cgo declarations and type definitions shared by all
+// CGO-supported platforms. The per-platform library directory is selected via
+// GOOS/GOARCH-conditional #cgo LDFLAGS directives below.
+//
+// Requirements:
+//   - Linux (x64/arm64): GCC toolchain. Precompiled static libraries in
+//     lib/linux-{x64,arm64}/ are ABI-compatible with CGO.
+//   - Windows x64: MinGW-w64 GCC toolchain (NOT MSVC). Libraries in
+//     lib/windows-x64/ are built with MinGW-w64 GCC and link -lstdc++.
+//   - Windows arm64: clang toolchain (llvm-mingw or MSYS2 CLANGARM64).
+//     MinGW-w64 GCC has no aarch64 target; libraries in lib/windows-arm64/
+//     are built with clang and link libc++ (-lc++).
+//   - macOS (x64/arm64): Xcode clang toolchain. macOS uses libc++; libstdc++
+//     was removed from Xcode toolchains, hence -lc++.
 package zxing
 
 /*
 #cgo CXXFLAGS: -std=c++20
 #cgo CFLAGS: -I${SRCDIR}/../../include
-#cgo LDFLAGS: -L${SRCDIR}/../../lib/linux-x64 -lzxingwrapper -lZXing -lstdc++ -lm
+#cgo linux,amd64   LDFLAGS: -L${SRCDIR}/../../lib/linux-x64 -lzxingwrapper -lZXing -lstdc++ -lm
+#cgo linux,arm64   LDFLAGS: -L${SRCDIR}/../../lib/linux-arm64 -lzxingwrapper -lZXing -lstdc++ -lm
+#cgo windows,amd64 LDFLAGS: -L${SRCDIR}/../../lib/windows-x64 -lzxingwrapper -lZXing -lstdc++
+#cgo windows,arm64 LDFLAGS: -L${SRCDIR}/../../lib/windows-arm64 -lzxingwrapper -lZXing -lc++
+#cgo darwin,amd64  LDFLAGS: -L${SRCDIR}/../../lib/darwin-x64 -lzxingwrapper -lZXing -lc++
+#cgo darwin,arm64  LDFLAGS: -L${SRCDIR}/../../lib/darwin-arm64 -lzxingwrapper -lZXing -lc++
 #include <stdlib.h>
 #include "zxing.h"
 */

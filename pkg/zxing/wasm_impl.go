@@ -1,7 +1,7 @@
-//go:build (!cgo || !(linux || windows)) && !(js && wasm)
+//go:build (!cgo || !(linux || windows || darwin)) && !(js && wasm)
 
 // Package zxing WASM backend implementation using wazero runtime.
-// This file is active when CGO is disabled or on non-linux/windows platforms.
+// This file is active when CGO is disabled or on non-linux/windows/darwin platforms.
 package zxing
 
 import (

@@ -1,0 +1,234 @@
+name: Build Prebuilt Libraries
+
+# Builds C++ static libraries for platforms that cannot be produced on a
+# single local machine: linux-arm64, windows-arm64, darwin-x64, darwin-arm64.
+#
+# Results are uploaded as workflow artifacts ONLY. Nothing is committed back
+# and the existing lib/linux-x64 and lib/windows-x64 directories are never
+# modified. Download the artifacts and commit the contents into
+# lib/<os>-<arch>/ manually when ready.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # Linux arm64: built inside a Rocky Linux 8 aarch64 container (glibc 2.28)
+  # on the native arm64 runner. CGO build+test runs on the host toolchain.
+  linux-arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Build static libraries in Rocky Linux 8 container (glibc 2.28)
+        run: |
+          mkdir -p lib/linux-arm64
+          docker build -t zxing-linux-arm64-build -f docker/Dockerfile.linux-arm64-build docker/
+          docker run --rm -v "$PWD":/workspace:Z zxing-linux-arm64-build sh -c "
+            /tmp/patch_using_enum.sh /workspace/zxing-cpp && \
+            cd /tmp && rm -rf build && mkdir -p build && cd build && \
+            cmake -G 'Unix Makefiles' \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_STATIC_LIB=ON \
+              -DBUILD_SHARED_LIBS=OFF \
+              -DCMAKE_CXX_STANDARD=20 \
+              -DCMAKE_CXX_FLAGS=-fcoroutines \
+              /workspace && \
+            make -j\$(nproc) && \
+            cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/linux-arm64/
+          "
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test CGO backend (arm64 host toolchain)
+        run: |
+          CGO_ENABLED=1 go test -buildvcs=false -v ./pkg/zxing/...
+          CGO_ENABLED=1 go build -buildvcs=false -o zxing-cli ./cmd/zxing-cli
+          ./zxing-cli -i testdata/qrcode_test.png --try-harder
+
+      - name: Generate BUILDINFO
+        run: |
+          ZXING_VER=$(git -C zxing-cpp describe --tags --always 2>/dev/null || echo "unknown")
+          SIZE_ZXING=$(stat -c%s lib/linux-arm64/libZXing.a)
+          SIZE_WRAP=$(stat -c%s lib/linux-arm64/libzxingwrapper.a)
+          SHA_ZXING=$(sha256sum lib/linux-arm64/libZXing.a | cut -d' ' -f1)
+          SHA_WRAP=$(sha256sum lib/linux-arm64/libzxingwrapper.a | cut -d' ' -f1)
+          cat > lib/linux-arm64/BUILDINFO <<EOF
+          Build: Linux arm64 (native aarch64, Rocky Linux 8 container)
+          Date: $(date -u +%Y-%m-%d)
+          zxing-cpp: ${ZXING_VER}
+          Builder: Rocky Linux 8 (glibc 2.28) + gcc-toolset-12 (GCC 12)
+          Toolchain: docker/Dockerfile.linux-arm64-build
+          CMake: -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_FLAGS=-fcoroutines
+          Format: ELF aarch64 (Linux static archive, glibc 2.28 compatible)
+          Libraries:
+            libZXing.a - ZXing-CPP core static library (${SIZE_ZXING} bytes)
+              SHA-256: ${SHA_ZXING}
+            libzxingwrapper.a - CGO wrapper static library (${SIZE_WRAP} bytes)
+              SHA-256: ${SHA_WRAP}
+          EOF
+          cat lib/linux-arm64/BUILDINFO
+
+      - name: Upload libraries artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libraries-linux-arm64
+          path: lib/linux-arm64/
+          if-no-files-found: error
+
+  # Windows arm64: MinGW-w64 GCC has no aarch64 target, so the libraries are
+  # built with clang (MSYS2 CLANGARM64, the llvm-mingw lineage) on the native
+  # arm64 Windows runner. CGO also uses clang via CC=clang.
+  windows-arm64:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Setup MSYS2 CLANGARM64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANGARM64
+          install: >-
+            mingw-w64-clang-aarch64-toolchain
+            mingw-w64-clang-aarch64-cmake
+            mingw-w64-clang-aarch64-ninja
+
+      - name: Add CLANGARM64 to PATH
+        shell: bash
+        run: echo "C:/msys64/clangarm64/bin" >> $GITHUB_PATH
+
+      - name: Build static libraries (clang aarch64)
+        shell: bash
+        run: |
+          mkdir -p lib/windows-arm64
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_STATIC_LIB=ON \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            .
+          cmake --build build -j$(nproc)
+          cp build/lib/libZXing.a build/lib/libzxingwrapper.a lib/windows-arm64/
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test CGO backend (windows/arm64, clang)
+        shell: bash
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          CGO_ENABLED=1 go test -buildvcs=false -v ./pkg/zxing/...
+          CGO_ENABLED=1 go build -buildvcs=false -o zxing-cli.exe ./cmd/zxing-cli
+          ./zxing-cli.exe -i testdata/qrcode_test.png --try-harder
+
+      - name: Generate BUILDINFO
+        shell: bash
+        run: |
+          ZXING_VER=$(git -C zxing-cpp describe --tags --always 2>/dev/null || echo "unknown")
+          SIZE_ZXING=$(stat -c%s lib/windows-arm64/libZXing.a)
+          SIZE_WRAP=$(stat -c%s lib/windows-arm64/libzxingwrapper.a)
+          SHA_ZXING=$(sha256sum lib/windows-arm64/libZXing.a | cut -d' ' -f1)
+          SHA_WRAP=$(sha256sum lib/windows-arm64/libzxingwrapper.a | cut -d' ' -f1)
+          cat > lib/windows-arm64/BUILDINFO <<EOF
+          Build: Windows arm64 (clang aarch64, MSYS2 CLANGARM64)
+          Date: $(date -u +%Y-%m-%d)
+          zxing-cpp: ${ZXING_VER}
+          Builder: windows-11-arm runner + MSYS2 CLANGARM64 (llvm-mingw clang)
+          Toolchain: .github/workflows/build-libs.yml
+          CMake: -G Ninja -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
+          Format: PE aarch64 (Windows static archive, libc++)
+          Libraries:
+            libZXing.a - ZXing-CPP core static library (${SIZE_ZXING} bytes)
+              SHA-256: ${SHA_ZXING}
+            libzxingwrapper.a - CGO wrapper static library (${SIZE_WRAP} bytes)
+              SHA-256: ${SHA_WRAP}
+          EOF
+          cat lib/windows-arm64/BUILDINFO
+
+      - name: Upload libraries artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libraries-windows-arm64
+          path: lib/windows-arm64/
+          if-no-files-found: error
+
+  # macOS: native clang build on both architectures. macos-13 is an Intel
+  # runner (darwin-x64); macos-15 is Apple Silicon (darwin-arm64).
+  darwin:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            libdir: darwin-x64
+            arch: x86_64
+          - runner: macos-15
+            libdir: darwin-arm64
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Build static libraries (clang)
+        run: |
+          mkdir -p lib/${{ matrix.libdir }}
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_STATIC_LIB=ON \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            .
+          cmake --build build -j$(sysctl -n hw.ncpu)
+          cp build/lib/libZXing.a build/lib/libzxingwrapper.a lib/${{ matrix.libdir }}/
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test CGO backend (macOS, clang)
+        run: |
+          CGO_ENABLED=1 go test -buildvcs=false -v ./pkg/zxing/...
+          CGO_ENABLED=1 go build -buildvcs=false -o zxing-cli ./cmd/zxing-cli
+          ./zxing-cli -i testdata/qrcode_test.png --try-harder
+
+      - name: Generate BUILDINFO
+        run: |
+          ZXING_VER=$(git -C zxing-cpp describe --tags --always 2>/dev/null || echo "unknown")
+          SIZE_ZXING=$(stat -f%z lib/${{ matrix.libdir }}/libZXing.a)
+          SIZE_WRAP=$(stat -f%z lib/${{ matrix.libdir }}/libzxingwrapper.a)
+          SHA_ZXING=$(shasum -a 256 lib/${{ matrix.libdir }}/libZXing.a | cut -d' ' -f1)
+          SHA_WRAP=$(shasum -a 256 lib/${{ matrix.libdir }}/libzxingwrapper.a | cut -d' ' -f1)
+          cat > lib/${{ matrix.libdir }}/BUILDINFO <<EOF
+          Build: macOS ${{ matrix.arch }} (native clang, ${{ matrix.runner }} runner)
+          Date: $(date -u +%Y-%m-%d)
+          zxing-cpp: ${ZXING_VER}
+          Builder: GitHub ${{ matrix.runner }} + Xcode clang
+          Toolchain: .github/workflows/build-libs.yml
+          CMake: -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+          Format: Mach-O ${{ matrix.arch }} (macOS static archive, libc++, min macOS 12.0)
+          Libraries:
+            libZXing.a - ZXing-CPP core static library (${SIZE_ZXING} bytes)
+              SHA-256: ${SHA_ZXING}
+            libzxingwrapper.a - CGO wrapper static library (${SIZE_WRAP} bytes)
+              SHA-256: ${SHA_WRAP}
+          EOF
+          cat lib/${{ matrix.libdir }}/BUILDINFO
+
+      - name: Upload libraries artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libraries-${{ matrix.libdir }}
+          path: lib/${{ matrix.libdir }}/
+          if-no-files-found: error

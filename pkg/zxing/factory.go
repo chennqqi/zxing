@@ -6,7 +6,7 @@ import (
 
 // New creates a new ZXing instance with the given configuration.
 // When Backend is Auto, the backend is selected at compile time:
-// - CGO is used when CGO_ENABLED=1 on linux or windows
+// - CGO is used when CGO_ENABLED=1 on linux, windows or darwin
 // - WASM (wazero) is used otherwise
 func New(config *Config) (ZXing, error) {
 	if config == nil {
@@ -27,8 +27,8 @@ func New(config *Config) (ZXing, error) {
 
 // NewCGO creates a CGO backend instance.
 // Returns an error if CGO is not available on the current platform.
-// CGO requires CGO_ENABLED=1 on linux or windows with precompiled static
-// libraries in lib/{linux,windows}-x64/. Run 'go run ./cmd/build build-lib'
+// CGO requires CGO_ENABLED=1 on linux, windows or darwin with precompiled
+// static libraries in lib/{os}-{arch}/. Run 'go run ./cmd/build build-lib'
 // or use Docker ('docker/Dockerfile.linux-build' or 'docker/Dockerfile.win-build')
 // to rebuild libraries if missing.
 func NewCGO(config *Config) (ZXing, error) {
@@ -36,7 +36,7 @@ func NewCGO(config *Config) (ZXing, error) {
 		config = DefaultConfig()
 	}
 	if !cgoAvailable {
-		return nil, fmt.Errorf("CGO backend is not available (requires CGO_ENABLED=1 on linux or windows with precompiled static libraries in lib/{linux,windows}-x64/)")
+		return nil, fmt.Errorf("CGO backend is not available (requires CGO_ENABLED=1 on linux, windows or darwin with precompiled static libraries in lib/{os}-{arch}/)")
 	}
 	return &cgoZXing{config: config}, nil
 }
@@ -51,7 +51,7 @@ func NewWASM(config *Config) (ZXing, error) {
 }
 
 // newAuto selects the backend at compile time based on the cgoAvailable constant.
-// cgoAvailable is true when CGO is enabled on linux/windows (see cgo_impl.go),
+// cgoAvailable is true when CGO is enabled on linux/windows/darwin (see cgo_impl.go),
 // and false otherwise (see cgo_stub.go).
 func newAuto(config *Config) (ZXing, error) {
 	if cgoAvailable {

@@ -11,20 +11,25 @@
   - **WASM 后端**：基于 [wazero](https://github.com/tetratelabs/wazero) 的纯 Go WASM 运行时，无 CGO 依赖
 - 编译期后端选择：通过 Go build tags 自动选择
 - 跨平台支持：Linux, Windows, macOS
-- 预编译静态库：内置 Linux x64 和 Windows x64 的静态库，无需本地 C++ 编译环境
+- 预编译静态库：内置 Linux / Windows / macOS（x64 与 arm64）静态库，无需本地 C++ 编译环境
 
 ## 平台支持
 
 | 平台 | CGO 后端 | WASM 后端 | 说明 |
 |------|----------|----------|------|
 | Linux x64 | ✅ | ✅ | 预编译静态库已包含 |
+| Linux arm64 | ✅ | ✅ | 预编译静态库（glibc 2.28+）|
 | Windows x64 | ✅ | ✅ | 预编译静态库已包含（需 MinGW-w64 GCC）|
-| macOS | ❌ | ✅ | CGO 后端不支持，使用 WASM |
+| Windows arm64 | ✅ | ✅ | 预编译静态库（需 clang / llvm-mingw 工具链）|
+| macOS x64 / arm64 | ✅ | ✅ | 预编译静态库（需 Xcode clang）|
 | js/wasm | ❌ | ✅ | 浏览器/Node.js 环境 |
 
-> **Windows CGO 注意事项**: Windows 上的 CGO 后端需要 **MinGW-w64** GCC 工具链（非 MSVC）。
+> **Windows CGO 注意事项**: Windows x64 上的 CGO 后端需要 **MinGW-w64** GCC 工具链（非 MSVC）。
 > 预编译静态库使用 MinGW-w64 编译，与 Go CGO 默认工具链兼容。
 > 安装方法：`choco install mingw` 或从 [winlibs.com](https://winlibs.com/) 下载。
+>
+> **Windows arm64**: MinGW-w64 GCC 没有 aarch64 目标，CGO 需要 **clang** 工具链
+> （llvm-mingw 或 MSYS2 CLANGARM64），构建时设置 `CC=clang CXX=clang++`。
 
 ## 后端选择
 
@@ -32,8 +37,8 @@
 
 | 条件 | 后端 | 说明 |
 |------|------|------|
-| `CGO_ENABLED=1` + Linux/Windows | CGO | 原生 C++ 静态库 |
-| `CGO_ENABLED=0` 或 macOS | WASM (wazero) | 纯 Go WASM 运行时 |
+| `CGO_ENABLED=1` + Linux/Windows/macOS | CGO | 原生 C++ 静态库 |
+| `CGO_ENABLED=0` 或其他平台 | WASM (wazero) | 纯 Go WASM 运行时 |
 | `GOOS=js GOARCH=wasm` | WASM (js) | 浏览器/Node.js 环境 |
 
 也可通过 `Config.Backend` 手动指定：
@@ -162,6 +167,11 @@ docker run --rm -v "$PWD":/workspace:Z zxing-win-build \
   make -j\$(nproc) && cp lib/libZXing.a lib/libzxingwrapper.a /workspace/lib/windows-x64/"
 ```
 
+其余平台（linux-arm64、windows-arm64、darwin-x64、darwin-arm64）的静态库通过
+GitHub Actions 构建：在仓库 Actions 页面手动触发 **Build Prebuilt Libraries**
+workflow，产物以 artifact 形式上传（不会覆盖已有库），下载后提交到
+`lib/{os}-{arch}/` 目录即可。
+
 > **Linux 兼容性**: Linux 静态库在 CentOS 7 (glibc 2.17) 上编译，兼容 CentOS 7+、Ubuntu 16.04+、RHEL 7+、Debian 8+ 等所有使用 glibc 2.17+ 的发行版。
 > GCC 10 需要 patch 脚本 (`docker/patch_using_enum.sh`) 替换 `using enum` 语法和 `-fcoroutines` 标志。
 
@@ -246,8 +256,7 @@ zxing/
 │   │   ├── interface.go       # ZXing 接口定义
 │   │   ├── config.go          # 配置
 │   │   ├── factory.go         # 后端工厂
-│   │   ├── cgo_binding_linux.go   # Linux CGO 绑定
-│   │   ├── cgo_binding_windows.go # Windows CGO 绑定
+│   │   ├── cgo_binding.go       # CGO 绑定（linux/windows/darwin × amd64/arm64）
 │   │   ├── cgo_impl.go        # CGO 实现
 │   │   ├── cgo_stub.go        # CGO stub（非 CGO 平台）
 │   │   ├── wasm_impl.go       # wazero WASM 实现

@@ -1,4 +1,8 @@
-# 验证lib目录中的静态库文件
+# Verify static library files in the lib/ directory.
+#
+# Checks each platform directory lib/{os}-{arch}/ for libZXing.a and
+# libzxingwrapper.a. Missing platform directories are reported but do not
+# fail the check — a directory that EXISTS but has missing files does fail.
 
 $ErrorActionPreference = "Stop"
 
@@ -7,92 +11,56 @@ Write-Host "Verifying Library Files" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 获取脚本所在目录的父目录（项目根目录）
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 
 $AllFound = $true
+$FoundAny = $false
 
-# 检查Windows静态库
-Write-Host "Checking Windows static libraries..." -ForegroundColor Cyan
-$WindowsLibDir = Join-Path $ProjectRoot "lib\windows\x64"
+function Test-Platform {
+    param([string]$Name)
 
-if (Test-Path $WindowsLibDir) {
-    $ZXingLib = Join-Path $WindowsLibDir "ZXing.lib"
-    $WrapperLib = Join-Path $WindowsLibDir "zxingwrapper.lib"
-    
-    if (Test-Path $ZXingLib) {
-        $size = (Get-Item $ZXingLib).Length / 1MB
-        Write-Host "  [OK] ZXing.lib: $([math]::Round($size, 2)) MB" -ForegroundColor Green
-    } else {
-        Write-Host "  [MISSING] ZXing.lib" -ForegroundColor Red
-        $AllFound = $false
+    $dir = Join-Path $ProjectRoot "lib\$Name"
+
+    Write-Host "Checking $Name..." -ForegroundColor Cyan
+
+    if (-not (Test-Path $dir)) {
+        Write-Host "  [SKIP] Directory not present: lib\$Name" -ForegroundColor DarkGray
+        Write-Host ""
+        return
     }
-    
-    if (Test-Path $WrapperLib) {
-        $size = (Get-Item $WrapperLib).Length / 1KB
-        Write-Host "  [OK] zxingwrapper.lib: $([math]::Round($size, 2)) KB" -ForegroundColor Green
-    } else {
-        Write-Host "  [MISSING] zxingwrapper.lib" -ForegroundColor Red
-        $AllFound = $false
+
+    $script:FoundAny = $true
+    foreach ($lib in @("libZXing.a", "libzxingwrapper.a")) {
+        $path = Join-Path $dir $lib
+        if (Test-Path $path) {
+            $size = (Get-Item $path).Length / 1KB
+            Write-Host "  [OK] ${lib}: $([math]::Round($size, 0)) KB" -ForegroundColor Green
+        } else {
+            Write-Host "  [MISSING] $lib" -ForegroundColor Red
+            $script:AllFound = $false
+        }
     }
-} else {
-    Write-Host "  [MISSING] Directory: $WindowsLibDir" -ForegroundColor Red
-    $AllFound = $false
+    Write-Host ""
 }
 
-Write-Host ""
+Test-Platform "linux-x64"
+Test-Platform "linux-arm64"
+Test-Platform "windows-x64"
+Test-Platform "windows-arm64"
+Test-Platform "darwin-x64"
+Test-Platform "darwin-arm64"
 
-# 检查Linux静态库
-Write-Host "Checking Linux static libraries..." -ForegroundColor Cyan
-$LinuxLibDir = Join-Path $ProjectRoot "lib\linux\x64"
-
-if (Test-Path $LinuxLibDir) {
-    $ZXingLib = Join-Path $LinuxLibDir "libZXing.a"
-    $WrapperLib = Join-Path $LinuxLibDir "libzxingwrapper.a"
-    
-    if (Test-Path $ZXingLib) {
-        $size = (Get-Item $ZXingLib).Length / 1MB
-        Write-Host "  [OK] libZXing.a: $([math]::Round($size, 2)) MB" -ForegroundColor Green
-    } else {
-        Write-Host "  [MISSING] libZXing.a" -ForegroundColor Red
-        $AllFound = $false
-    }
-    
-    if (Test-Path $WrapperLib) {
-        $size = (Get-Item $WrapperLib).Length / 1KB
-        Write-Host "  [OK] libzxingwrapper.a: $([math]::Round($size, 2)) KB" -ForegroundColor Green
-    } else {
-        Write-Host "  [MISSING] libzxingwrapper.a" -ForegroundColor Red
-        $AllFound = $false
-    }
-} else {
-    Write-Host "  [MISSING] Directory: $LinuxLibDir" -ForegroundColor Red
-    $AllFound = $false
-}
-
-Write-Host ""
-
-# 检查WASM文件
+# Check WASM files
 Write-Host "Checking WASM files..." -ForegroundColor Cyan
 $WasmDir = Join-Path $ProjectRoot "wasm"
 
 if (Test-Path $WasmDir) {
-    $WasmFile = Join-Path $WasmDir "zxing.wasm"
-    $JsFile = Join-Path $WasmDir "zxing.js"
-    
+    $WasmFile = Join-Path $WasmDir "zxingwrapper.wasm"
     if (Test-Path $WasmFile) {
         $size = (Get-Item $WasmFile).Length / 1MB
-        Write-Host "  [OK] zxing.wasm: $([math]::Round($size, 2)) MB" -ForegroundColor Green
+        Write-Host "  [OK] zxingwrapper.wasm: $([math]::Round($size, 2)) MB" -ForegroundColor Green
     } else {
-        Write-Host "  [MISSING] zxing.wasm" -ForegroundColor Red
-        $AllFound = $false
-    }
-    
-    if (Test-Path $JsFile) {
-        $size = (Get-Item $JsFile).Length / 1KB
-        Write-Host "  [OK] zxing.js: $([math]::Round($size, 2)) KB" -ForegroundColor Green
-    } else {
-        Write-Host "  [MISSING] zxing.js" -ForegroundColor Red
+        Write-Host "  [MISSING] zxingwrapper.wasm" -ForegroundColor Red
         $AllFound = $false
     }
 } else {
@@ -103,7 +71,10 @@ if (Test-Path $WasmDir) {
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 if ($AllFound) {
-    Write-Host "All library files are present!" -ForegroundColor Green
+    Write-Host "All present library files verified!" -ForegroundColor Green
+    if (-not $FoundAny) {
+        Write-Host "Note: no platform lib/ directories found." -ForegroundColor Yellow
+    }
     exit 0
 } else {
     Write-Host "Some library files are missing!" -ForegroundColor Red

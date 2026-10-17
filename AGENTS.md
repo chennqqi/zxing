@@ -76,9 +76,28 @@ Static libraries (.a) have no glibc version markers. But when `go build` links t
 
 ### Windows Cross-Compile
 
-Windows static libraries (`lib/windows-x64/`) are built with MinGW-w64 cross-compiler. Alpine is acceptable for Windows cross-compilation because MinGW produces PE binaries (Windows format), not ELF. The host libc (musl) does not affect the output.
+Windows x64 static libraries (`lib/windows-x64/`) are built with MinGW-w64 cross-compiler. Alpine is acceptable for Windows cross-compilation because MinGW produces PE binaries (Windows format), not ELF. The host libc (musl) does not affect the output.
 
 - **Dockerfile**: `docker/Dockerfile.win-build` (Alpine 3.18 + MinGW-w64)
+
+### Other Platforms (GitHub Actions)
+
+The remaining platform libraries are built on GitHub hosted runners by
+`.github/workflows/build-libs.yml` (workflow_dispatch, artifacts only —
+never committed back automatically):
+
+- **linux-arm64**: `ubuntu-24.04-arm` runner + `docker/Dockerfile.linux-arm64-build`
+  (Rocky Linux 8 aarch64, glibc 2.28, gcc-toolset-12). There is no aarch64
+  CentOS 7 equivalent with a usable toolchain, so glibc 2.28 is the floor —
+  covers RHEL/Rocky/Alma 8+, Ubuntu 20.04+, Debian 11+, Amazon Linux 2023+.
+- **windows-arm64**: `windows-11-arm` runner + MSYS2 CLANGARM64 (clang).
+  MinGW-w64 GCC has no aarch64 target — clang (llvm-mingw lineage) is
+  required, and the libraries link libc++, so CGO LDFLAGS must use `-lc++`
+  (not `-lstdc++`). `go build` on windows/arm64 requires `CC=clang`.
+- **darwin-x64 / darwin-arm64**: `macos-13` (Intel) and `macos-15` (Apple
+  Silicon) runners, native Xcode clang, no patches needed. macOS links
+  libc++ (`-lc++`); `libstdc++` was removed from Xcode toolchains.
+  `-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0` sets the minimum macOS version.
 
 ## WASM Module
 
@@ -86,13 +105,18 @@ The WASM module (`wasm/zxingwrapper.wasm`) is platform-independent. A single `.w
 
 ## Build Tags
 
-CGO backend is available on `linux` and `windows` only. WASM backend is used on all other platforms or when `CGO_ENABLED=0`.
+CGO backend is available on `linux`, `windows` and `darwin` (amd64 and arm64).
+WASM backend is used on all other platforms or when `CGO_ENABLED=0`.
 
 | Condition | Backend |
 |-----------|---------|
-| `CGO_ENABLED=1` + Linux/Windows | CGO |
-| `CGO_ENABLED=0` or macOS | WASM (wazero) |
+| `CGO_ENABLED=1` + Linux/Windows/macOS | CGO |
+| `CGO_ENABLED=0` or other OS | WASM (wazero) |
 | `GOOS=js GOARCH=wasm` | WASM (js) |
+
+Per-platform library directories are selected inside
+`pkg/zxing/cgo_binding.go` via GOOS/GOARCH-conditional `#cgo` LDFLAGS
+directives (`lib/{linux,windows,darwin}-{x64,arm64}/`).
 
 ## Code Style
 

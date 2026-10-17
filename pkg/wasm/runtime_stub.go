@@ -1,4 +1,4 @@
-//go:build cgo && (linux || windows) && !(js && wasm)
+//go:build cgo && (linux || windows || darwin) && !(js && wasm)
 
 package wasm
 

@@ -1,8 +1,8 @@
-//go:build cgo && (linux || windows)
+//go:build cgo && (linux || windows || darwin)
 
 // Package zxing CGO implementation.
 // This file contains the CGO-backed ZXing implementation that uses the
-// platform-specific binding files (cgo_binding_linux.go / cgo_binding_windows.go)
+// platform-conditional binding file (cgo_binding.go)
 // for Cgo declarations and type definitions.
 package zxing
 

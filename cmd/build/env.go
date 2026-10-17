@@ -72,7 +72,15 @@ func buildCGOEnv() ([]string, error) {
 
 	cflags := fmt.Sprintf("-I%s", includeDir)
 	cxxflags := fmt.Sprintf("-std=c++20 -I%s", includeDir)
-	ldflags := fmt.Sprintf("-L%s -lzxingwrapper -lZXing -lstdc++", libPath)
+
+	// macOS and Windows arm64 (llvm-mingw/CLANGARM64) link libc++ (-lc++);
+	// libstdc++ is unavailable in Xcode toolchains and has no aarch64 MinGW
+	// build. Linux (both arches) and Windows x64 use libstdc++ (-lstdc++).
+	cxxLib := "-lstdc++"
+	if runtime.GOOS == "darwin" || (runtime.GOOS == "windows" && runtime.GOARCH == "arm64") {
+		cxxLib = "-lc++"
+	}
+	ldflags := fmt.Sprintf("-L%s -lzxingwrapper -lZXing %s", libPath, cxxLib)
 	if runtime.GOOS == "linux" {
 		ldflags += " -lm"
 	}

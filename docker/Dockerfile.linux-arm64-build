@@ -1,0 +1,42 @@
+# Rocky Linux 8 aarch64 (glibc 2.28) + gcc-toolset-12 (GCC 12, full C++20)
+# Build Linux arm64 static libraries with broad binary compatibility.
+#
+# Arm64 Linux distributions are newer than the x64 ecosystem: there is no
+# aarch64 CentOS 7 equivalent with a usable SCL toolchain, so glibc 2.28 is
+# the practical floor. This covers RHEL/Rocky/Alma 8+, Ubuntu 20.04+,
+# Debian 11+, Amazon Linux 2023+, and all major arm64 distros (Graviton,
+# Kunpeng, Raspberry Pi OS 64-bit).
+FROM rockylinux:8
+
+# Install gcc-toolset-12 (GCC 12, full C++20 including 'using enum' and
+# coroutines), cmake (3.20), make, git
+RUN dnf install -y \
+        gcc-toolset-12-gcc \
+        gcc-toolset-12-gcc-c++ \
+        cmake \
+        make \
+        git \
+        wget \
+        tar \
+    && dnf clean all && \
+    rm -rf /var/cache/dnf
+
+# Install Go (arm64) for optional in-container CGO binary builds,
+# matching the glibc-compat strategy of the x64 image
+ENV GOLANG_VERSION=1.25.8
+RUN wget -q https://mirrors.aliyun.com/golang/go${GOLANG_VERSION}.linux-arm64.tar.gz -O /tmp/go.tar.gz && \
+    tar -C /usr/local -xzf /tmp/go.tar.gz && \
+    rm /tmp/go.tar.gz
+
+# Enable gcc-toolset-12 by default (explicit full PATH for reliability)
+ENV PATH=/usr/local/go/bin:/opt/rh/gcc-toolset-12/root/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV GOROOT=/usr/local/go
+
+WORKDIR /workspace
+
+# Kept for parity with the x64 image: a no-op for GCC 12 (it supports
+# 'using enum'), but harmless and guards against toolchain downgrades.
+COPY patch_using_enum.sh /tmp/patch_using_enum.sh
+RUN chmod +x /tmp/patch_using_enum.sh
+
+CMD ["sh", "-c", "/tmp/patch_using_enum.sh /workspace/zxing-cpp && cmake -G 'Unix Makefiles' -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LIB=ON -DBUILD_SHARED_LIBS=OFF . && make -j$(nproc)"]
