@@ -203,6 +203,7 @@ jobs:
           CXX: clang++
           CGO_LDFLAGS: -static
         run: |
+          export PATH="/c/msys64/clangarm64/bin:$PATH"
           CGO_ENABLED=1 \
           go build -buildvcs=false -o zxing-cli-windows-arm64.exe ./cmd/zxing-cli
 
