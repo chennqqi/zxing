@@ -252,13 +252,17 @@ jobs:
           gcc --version
           which gcc
 
+      # -static links libstdc++/libgcc/winpthreads statically so the binary
+      # does not depend on MinGW runtime DLLs resolving correctly via PATH
+      # (the runner image shadows MSYS2 with its own GCC, causing
+      # STATUS_ENTRYPOINT_NOT_FOUND 0xc0000139 at test binary startup).
       - name: Build CGO
         shell: bash
         run: |
           CGO_ENABLED=1 \
           CGO_CFLAGS="-I$(pwd)/include" \
           CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
-          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++" \
+          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++ -static" \
           go build -buildvcs=false ./...
 
       - name: Test CGO
@@ -267,7 +271,7 @@ jobs:
           CGO_ENABLED=1 \
           CGO_CFLAGS="-I$(pwd)/include" \
           CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
-          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++" \
+          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++ -static" \
           go test -buildvcs=false -v ./pkg/zxing/...
 
       - name: Build CLI
@@ -276,7 +280,7 @@ jobs:
           CGO_ENABLED=1 \
           CGO_CFLAGS="-I$(pwd)/include" \
           CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
-          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++" \
+          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++ -static" \
           go build -buildvcs=false -o zxing-cli.exe ./cmd/zxing-cli
 
       - name: Test CLI

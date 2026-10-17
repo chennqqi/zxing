@@ -75,13 +75,15 @@ jobs:
         shell: bash
         run: echo "C:/msys64/mingw64/bin" >> $GITHUB_PATH
 
+      # -static links the MinGW C++ runtime so the release binary runs on
+      # machines without matching MinGW DLLs installed.
       - name: Build CLI (CGO backend)
         shell: bash
         run: |
           CGO_ENABLED=1 \
           CGO_CFLAGS="-I$(pwd)/include" \
           CGO_CXXFLAGS="-std=c++20 -I$(pwd)/include" \
-          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++" \
+          CGO_LDFLAGS="-L$(pwd)/lib/windows-x64 -lzxingwrapper -lZXing -lstdc++ -static" \
           go build -buildvcs=false -o zxing-cli-windows-x64.exe ./cmd/zxing-cli
 
       - name: Build CLI (WASM backend)
@@ -199,6 +201,7 @@ jobs:
         env:
           CC: clang
           CXX: clang++
+          CGO_LDFLAGS: -static
         run: |
           CGO_ENABLED=1 \
           go build -buildvcs=false -o zxing-cli-windows-arm64.exe ./cmd/zxing-cli

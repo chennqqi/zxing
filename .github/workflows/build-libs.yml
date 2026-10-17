@@ -120,11 +120,14 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # -static links libc++/libunwind/winpthreads statically so the test
+      # binary does not depend on runtime DLLs resolving correctly via PATH.
       - name: Test CGO backend (windows/arm64, clang)
         shell: bash
         env:
           CC: clang
           CXX: clang++
+          CGO_LDFLAGS: -static
         run: |
           CGO_ENABLED=1 go test -buildvcs=false -v ./pkg/zxing/...
           CGO_ENABLED=1 go build -buildvcs=false -o zxing-cli.exe ./cmd/zxing-cli
