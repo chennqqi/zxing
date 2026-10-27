@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/gin-gonic/gin v1.10.1
-	github.com/tetratelabs/wazero v1.12.0
+	github.com/tetratelabs/wazero v1.12.1-0.20261019203559-ef2dd2f85376
 	golang.org/x/image v0.35.0
 )
 

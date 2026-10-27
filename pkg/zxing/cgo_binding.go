@@ -58,44 +58,14 @@ const (
 	FormatAll        BarcodeFormat = C.FORMAT_ALL
 )
 
-// String returns the string representation of the barcode format.
+// String returns the canonical UPPER_SNAKE name of the barcode format,
+// consistent with Result.Format values on both CGO and WASM backends.
 func (f BarcodeFormat) String() string {
-	switch f {
-	case FormatNone:
-		return "None"
-	case FormatQRCode:
-		return "QR Code"
-	case FormatAztec:
-		return "Aztec"
-	case FormatCodabar:
-		return "Codabar"
-	case FormatCode39:
-		return "Code 39"
-	case FormatCode93:
-		return "Code 93"
-	case FormatCode128:
-		return "Code 128"
-	case FormatDataMatrix:
-		return "Data Matrix"
-	case FormatEAN8:
-		return "EAN-8"
-	case FormatEAN13:
-		return "EAN-13"
-	case FormatITF:
-		return "ITF"
-	case FormatMaxiCode:
-		return "MaxiCode"
-	case FormatPDF417:
-		return "PDF417"
-	case FormatUPCA:
-		return "UPC-A"
-	case FormatUPCE:
-		return "UPC-E"
-	case FormatAll:
-		return "All"
-	default:
+	name := barcodeFormatName(f)
+	if len(name) == 0 || name == "Unknown" {
 		return fmt.Sprintf("Unknown(%d)", f)
 	}
+	return name
 }
 
 // CGODecodeOptions represents CGO decode options.

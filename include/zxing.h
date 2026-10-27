@@ -41,6 +41,15 @@ typedef struct {
     float confidence; // 置信度
 } DecodeResult;
 
+// 多码解码结果结构体，附带条码四角坐标
+// points 依次为 topLeft, topRight, bottomRight, bottomLeft 的 (x, y) 像素坐标
+typedef struct {
+    char* text;       // 解码文本
+    int format;       // 条码格式
+    float confidence; // 置信度
+    int points[8];    // 四角坐标 (x,y) 对
+} MultiDecodeResult;
+
 // 创建默认解码选项
 DecodeOptions* create_default_options();
 
@@ -76,6 +85,20 @@ DecodeResult* decode_barcode_data(const unsigned char* file_data, int file_size,
 // Decodes tightly packed raw pixels without an intermediate encoded image.
 DecodeResult* decode_barcode_pixels(const unsigned char* data, int width, int height,
                                     int channels, const DecodeOptions* options);
+
+// Decodes all barcodes from tightly packed raw pixels.
+// max_symbols <= 0 means no limit; larger values are clamped to 255.
+// On success returns an array of *count results; the array is non-NULL even
+// when *count is 0 (no barcode found). Returns NULL on error.
+MultiDecodeResult** decode_barcodes_pixels(const unsigned char* data, int width, int height,
+                                           int channels, const DecodeOptions* options,
+                                           int max_symbols, int* count);
+
+// Gets the result at the given index from a decode_barcodes_pixels result array.
+MultiDecodeResult* multi_decode_result_get(MultiDecodeResult** results, int index);
+
+// Frees a decode_barcodes_pixels result array.
+void free_multi_results(MultiDecodeResult** results, int count);
 
 #ifdef __cplusplus
 }

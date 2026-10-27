@@ -8,6 +8,12 @@ set(CMAKE_TOOLCHAIN_FILE $ENV{EMSDK}/upstream/emscripten/cmake/Modules/Platform/
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# zxing-cpp uses exceptions internally for decoder control flow. With
+# -fno-exceptions (emscripten default) a thrown error aborts as
+# "unreachable". Use native WebAssembly exception handling instead; the
+# wazero runtime enables experimental.CoreFeaturesExceptionHandling.
+add_compile_options(-fwasm-exceptions)
+
 # 设置输出目录
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -30,7 +36,7 @@ set(ZXING_C_API OFF CACHE BOOL "Build the C-API" FORCE)
 set(EMSCRIPTEN_LINK_FLAGS
     -s WASM=1
     -s STANDALONE_WASM=1
-    -s EXPORTED_FUNCTIONS='["_malloc","_free","_create_default_options","_configure_decode_options","_free_options","_decode_barcode","_decode_barcode_data","_decode_barcode_pixels","_decode_barcodes","_decode_result_get","_free_result","_free_results","_get_last_error","_zxing_malloc","_zxing_free"]'
+    -s EXPORTED_FUNCTIONS='["_malloc","_free","_create_default_options","_configure_decode_options","_free_options","_decode_barcode","_decode_barcode_data","_decode_barcode_pixels","_decode_barcodes","_decode_barcodes_pixels","_decode_result_get","_multi_decode_result_get","_free_result","_free_results","_free_multi_results","_get_last_error","_zxing_malloc","_zxing_free"]'
     -s ALLOW_MEMORY_GROWTH=1
     -O2
     -Wl,--no-entry
@@ -38,6 +44,7 @@ set(EMSCRIPTEN_LINK_FLAGS
     -Wl,--export=zxing_free
     -Wl,--export=configure_decode_options
     -Wl,--export=decode_barcode_pixels
+    -Wl,--export=decode_barcodes_pixels
 )
 
 # 添加ZXingCPP子目录
@@ -73,9 +80,24 @@ target_link_libraries(zxingwrapper
 )
 
 # 设置Emscripten链接标志
+# NOTE: EMSCRIPTEN_LINK_FLAGS is passed to em++ as a single ';'-joined
+# argument, so only '-s KEY=VALUE' items take effect inside it. Clang-style
+# flags like -fwasm-exceptions must go through target_link_options instead.
 set_target_properties(zxingwrapper PROPERTIES
     LINK_FLAGS "${EMSCRIPTEN_LINK_FLAGS}"
     SUFFIX ".wasm"
+)
+
+# Enable native WebAssembly exception handling at link time so em++
+# selects the exception-enabled sysroot libraries (libc++abi-except etc.).
+target_link_options(zxingwrapper PRIVATE -fwasm-exceptions)
+
+# wazero only supports the new exnref exception-handling instructions, while
+# emscripten emits the legacy try/catch encoding. Translate after linking.
+add_custom_command(TARGET zxingwrapper POST_BUILD
+    COMMAND $ENV{EMSDK}/upstream/bin/wasm-opt --enable-exception-handling --enable-gc --enable-multivalue --enable-reference-types --translate-to-exnref $<TARGET_FILE:zxingwrapper> -o $<TARGET_FILE:zxingwrapper>.exnref
+    COMMAND ${CMAKE_COMMAND} -E rename $<TARGET_FILE:zxingwrapper>.exnref $<TARGET_FILE:zxingwrapper>
+    COMMENT "Translating legacy wasm exceptions to exnref for wazero"
 )
 
 # 安装规则

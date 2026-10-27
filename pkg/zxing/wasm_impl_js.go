@@ -73,6 +73,68 @@ func (w *wasmZXing) DecodeBytes(ctx context.Context, data []byte, width, height 
 	}, nil
 }
 
+// DecodeImageMulti 解码图像中的所有条码
+func (w *wasmZXing) DecodeImageMulti(ctx context.Context, img image.Image, opts *DecodeOptions) ([]*Result, error) {
+	if !w.runtime.IsReady() {
+		return nil, fmt.Errorf("WASM runtime not ready")
+	}
+
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+
+	data := make([]byte, width*height*4)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			idx := (y*width + x) * 4
+			data[idx] = uint8(r >> 8)
+			data[idx+1] = uint8(g >> 8)
+			data[idx+2] = uint8(b >> 8)
+			data[idx+3] = uint8(a >> 8)
+		}
+	}
+
+	return w.DecodeBytesMulti(ctx, data, width, height, opts)
+}
+
+// DecodeBytesMulti 解码字节数据中的所有条码
+// It returns an empty (non-nil) slice when no barcode is found.
+func (w *wasmZXing) DecodeBytesMulti(ctx context.Context, data []byte, width, height int, opts *DecodeOptions) ([]*Result, error) {
+	if !w.runtime.IsReady() {
+		return nil, fmt.Errorf("WASM runtime not ready")
+	}
+
+	if len(data) == 0 {
+		return nil, fmt.Errorf("empty image data")
+	}
+
+	multiResults, err := w.runtime.DecodeMultiple(data, width, height, 4)
+	if err != nil {
+		return nil, fmt.Errorf("WASM multi decode failed: %w", err)
+	}
+
+	results := make([]*Result, 0, len(multiResults))
+	for _, r := range multiResults {
+		if r == nil || !r.Success {
+			continue
+		}
+		results = append(results, &Result{
+			Text:     r.Text,
+			Format:   r.Format,
+			Points:   []image.Point{},
+			Metadata: make(map[string]interface{}),
+		})
+	}
+
+	// Apply the MaxResults limit on the Go side; the js module has no such option.
+	if opts != nil && opts.MaxResults > 0 && len(results) > opts.MaxResults {
+		results = results[:opts.MaxResults]
+	}
+
+	return results, nil
+}
+
 // EncodeText 编码文本为条码图像
 func (w *wasmZXing) EncodeText(ctx context.Context, text string, opts *EncodeOptions) (image.Image, error) {
 	if !w.runtime.IsReady() {

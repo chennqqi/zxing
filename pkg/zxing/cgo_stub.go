@@ -37,44 +37,14 @@ const (
 	FormatAll        BarcodeFormat = 0xFFFF
 )
 
-// String returns the string representation of the barcode format.
+// String returns the canonical UPPER_SNAKE name of the barcode format,
+// consistent with Result.Format values on both CGO and WASM backends.
 func (f BarcodeFormat) String() string {
-	switch f {
-	case FormatNone:
-		return "None"
-	case FormatQRCode:
-		return "QR Code"
-	case FormatAztec:
-		return "Aztec"
-	case FormatCodabar:
-		return "Codabar"
-	case FormatCode39:
-		return "Code 39"
-	case FormatCode93:
-		return "Code 93"
-	case FormatCode128:
-		return "Code 128"
-	case FormatDataMatrix:
-		return "Data Matrix"
-	case FormatEAN8:
-		return "EAN-8"
-	case FormatEAN13:
-		return "EAN-13"
-	case FormatITF:
-		return "ITF"
-	case FormatMaxiCode:
-		return "MaxiCode"
-	case FormatPDF417:
-		return "PDF417"
-	case FormatUPCA:
-		return "UPC-A"
-	case FormatUPCE:
-		return "UPC-E"
-	case FormatAll:
-		return "All"
-	default:
+	name := barcodeFormatName(f)
+	if len(name) == 0 || name == "Unknown" {
 		return fmt.Sprintf("Unknown(%d)", f)
 	}
+	return name
 }
 
 // CGODecodeOptions represents CGO decode options (stub for non-CGO builds).
@@ -138,6 +108,16 @@ func (c *cgoZXing) DecodeImage(ctx context.Context, img image.Image, opts *Decod
 
 // DecodeBytes returns an error when CGO is not available.
 func (c *cgoZXing) DecodeBytes(ctx context.Context, data []byte, width, height int, opts *DecodeOptions) (*Result, error) {
+	return nil, fmt.Errorf("CGO backend is not available (requires CGO_ENABLED=1 on linux, windows or darwin)")
+}
+
+// DecodeImageMulti returns an error when CGO is not available.
+func (c *cgoZXing) DecodeImageMulti(ctx context.Context, img image.Image, opts *DecodeOptions) ([]*Result, error) {
+	return nil, fmt.Errorf("CGO backend is not available (requires CGO_ENABLED=1 on linux, windows or darwin)")
+}
+
+// DecodeBytesMulti returns an error when CGO is not available.
+func (c *cgoZXing) DecodeBytesMulti(ctx context.Context, data []byte, width, height int, opts *DecodeOptions) ([]*Result, error) {
 	return nil, fmt.Errorf("CGO backend is not available (requires CGO_ENABLED=1 on linux, windows or darwin)")
 }
 

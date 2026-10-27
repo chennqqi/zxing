@@ -1,7 +1,8 @@
-//go:build (!cgo || !(linux || windows || darwin)) && !(js && wasm)
+//go:build !(js && wasm)
 
 // Package zxing WASM backend implementation using wazero runtime.
-// This file is active when CGO is disabled or on non-linux/windows/darwin platforms.
+// The wazero backend is available on all platforms except GOOS=js GOARCH=wasm,
+// including when CGO is enabled (backend selectable via Config.Backend).
 package zxing
 
 import (
@@ -102,6 +103,70 @@ func (w *wasmZXing) DecodeBytes(ctx context.Context, data []byte, width, height 
 	}, nil
 }
 
+// DecodeImageMulti decodes all barcodes in an image using the WASM backend.
+func (w *wasmZXing) DecodeImageMulti(ctx context.Context, img image.Image, opts *DecodeOptions) ([]*Result, error) {
+	if err := w.ensureRuntime(ctx); err != nil {
+		return nil, err
+	}
+
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+
+	// Convert image to RGBA byte data
+	data := make([]byte, width*height*4)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			idx := (y*width + x) * 4
+			data[idx] = uint8(r >> 8)
+			data[idx+1] = uint8(g >> 8)
+			data[idx+2] = uint8(b >> 8)
+			data[idx+3] = uint8(a >> 8)
+		}
+	}
+
+	return w.DecodeBytesMulti(ctx, data, width, height, opts)
+}
+
+// DecodeBytesMulti decodes all barcodes in raw RGBA byte data using the WASM backend.
+// It returns an empty (non-nil) slice when no barcode is found.
+func (w *wasmZXing) DecodeBytesMulti(ctx context.Context, data []byte, width, height int, opts *DecodeOptions) ([]*Result, error) {
+	if err := w.ensureRuntime(ctx); err != nil {
+		return nil, err
+	}
+
+	if len(data) == 0 {
+		return nil, fmt.Errorf("empty image data")
+	}
+
+	runtimeOpts := mapDecodeOptions(opts)
+
+	maxResults := 0
+	if opts != nil {
+		maxResults = opts.MaxResults
+	}
+
+	multiResults, err := w.runtime.DecodeImageMulti(ctx, data, width, height, 4, runtimeOpts, maxResults)
+	if err != nil {
+		return nil, fmt.Errorf("WASM multi decode failed: %w", err)
+	}
+
+	results := make([]*Result, 0, len(multiResults))
+	for _, r := range multiResults {
+		results = append(results, &Result{
+			Text:   r.Text,
+			Format: r.Format,
+			Points: r.Points,
+			Metadata: map[string]interface{}{
+				"backend": "wasm",
+			},
+		})
+	}
+
+	return results, nil
+}
+
 // mapDecodeOptions converts public DecodeOptions to wasm.DecodeOptions.
 func mapDecodeOptions(opts *DecodeOptions) *wasm.DecodeOptions {
 	if opts == nil {
@@ -110,36 +175,7 @@ func mapDecodeOptions(opts *DecodeOptions) *wasm.DecodeOptions {
 
 	var formatFlags int
 	for _, f := range opts.PossibleFormats {
-		switch f {
-		case "QR_CODE":
-			formatFlags |= 1
-		case "AZTEC":
-			formatFlags |= 2
-		case "CODABAR":
-			formatFlags |= 4
-		case "CODE_39":
-			formatFlags |= 8
-		case "CODE_93":
-			formatFlags |= 16
-		case "CODE_128":
-			formatFlags |= 32
-		case "DATA_MATRIX":
-			formatFlags |= 64
-		case "EAN_8":
-			formatFlags |= 128
-		case "EAN_13":
-			formatFlags |= 256
-		case "ITF":
-			formatFlags |= 512
-		case "MAXICODE":
-			formatFlags |= 1024
-		case "PDF_417":
-			formatFlags |= 2048
-		case "UPC_A":
-			formatFlags |= 4096
-		case "UPC_E":
-			formatFlags |= 8192
-		}
+		formatFlags |= int(barcodeFormatFlag(f))
 	}
 	if formatFlags == 0 {
 		formatFlags = 0xFFFF // FORMAT_ALL

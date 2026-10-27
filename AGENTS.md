@@ -106,13 +106,15 @@ The WASM module (`wasm/zxingwrapper.wasm`) is platform-independent. A single `.w
 ## Build Tags
 
 CGO backend is available on `linux`, `windows` and `darwin` (amd64 and arm64).
-WASM backend is used on all other platforms or when `CGO_ENABLED=0`.
+The wazero WASM backend is compiled in on every platform except
+`GOOS=js GOARCH=wasm` — including CGO builds — and can be selected at
+runtime via `Config.Backend`. The auto backend prefers CGO when available.
 
-| Condition | Backend |
-|-----------|---------|
-| `CGO_ENABLED=1` + Linux/Windows/macOS | CGO |
-| `CGO_ENABLED=0` or other OS | WASM (wazero) |
-| `GOOS=js GOARCH=wasm` | WASM (js) |
+| Condition | Auto backend | `BackendWASM` selectable |
+|-----------|--------------|--------------------------|
+| `CGO_ENABLED=1` + Linux/Windows/macOS | CGO | yes (wazero) |
+| `CGO_ENABLED=0` or other OS | WASM (wazero) | yes (wazero) |
+| `GOOS=js GOARCH=wasm` | WASM (js) | yes (js) |
 
 Per-platform library directories are selected inside
 `pkg/zxing/cgo_binding.go` via GOOS/GOARCH-conditional `#cgo` LDFLAGS

@@ -1,4 +1,4 @@
-//go:build (!cgo || !(linux || windows || darwin)) && !(js && wasm)
+//go:build !(js && wasm)
 
 // Package wasm provides ZXing WebAssembly runtime support via wazero.
 package wasm
@@ -7,11 +7,13 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"image"
 	"os"
 	"sync"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
+	"github.com/tetratelabs/wazero/experimental"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
@@ -53,6 +55,15 @@ type EncodeResult struct {
 	ErrorMessage string  `json:"error_message"`
 }
 
+// MultiDecodeResult holds one barcode of a multi-barcode decode operation.
+// Points contains the four corner coordinates of the barcode in the image,
+// in the order topLeft, topRight, bottomRight, bottomLeft.
+type MultiDecodeResult struct {
+	Text   string
+	Format string
+	Points []image.Point
+}
+
 // NewRuntime creates a new wazero WASM runtime instance.
 func NewRuntime() *Runtime {
 	return &Runtime{}
@@ -72,7 +83,11 @@ func (r *Runtime) Initialize(ctx context.Context, wasmPath string) error {
 		return fmt.Errorf("failed to read WASM file %s: %w", wasmPath, err)
 	}
 
-	config := wazero.NewRuntimeConfig().WithCloseOnContextDone(true)
+	// The WASM module is built with -fwasm-exceptions because zxing-cpp uses
+	// C++ exceptions internally for decoder control flow.
+	config := wazero.NewRuntimeConfig().
+		WithCoreFeatures(api.CoreFeaturesV2 | experimental.CoreFeaturesExceptionHandling).
+		WithCloseOnContextDone(true)
 	r.runtime = wazero.NewRuntimeWithConfig(ctx, config)
 
 	// Instantiate WASI host functions (required by Emscripten STANDALONE_WASM)
@@ -200,6 +215,148 @@ func (r *Runtime) DecodeImage(ctx context.Context, data []byte, width, height, c
 		Text:    text,
 		Format:  formatToString(int(formatVal)),
 	}, nil
+}
+
+// DecodeImageMulti decodes all barcodes in raw pixel data using the WASM
+// module's decode_barcodes_pixels export. The data parameter must be tightly
+// packed pixel data with the given width, height, and channels (1-4).
+// maxResults limits the number of returned barcodes; values <= 0 mean no limit.
+// It returns an empty (non-nil) slice when no barcode is found.
+func (r *Runtime) DecodeImageMulti(ctx context.Context, data []byte, width, height, channels int, opts *DecodeOptions, maxResults int) ([]*MultiDecodeResult, error) {
+	if err := validateDecodeInput(data, width, height, channels); err != nil {
+		return nil, err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.module == nil || r.module.IsClosed() {
+		return nil, fmt.Errorf("WASM runtime not initialized or closed")
+	}
+
+	mem := r.module.Memory()
+	if mem == nil {
+		return nil, fmt.Errorf("WASM module has no exported memory")
+	}
+
+	// Allocate guest memory for pixel data
+	pixelSize := width * height * channels
+	pixelPtr, err := r.guestMalloc(ctx, uint64(pixelSize))
+	if err != nil {
+		return nil, err
+	}
+	defer r.guestFree(ctx, pixelPtr)
+
+	// Write pixel data into guest memory
+	if !mem.Write(pixelPtr, data[:pixelSize]) {
+		return nil, fmt.Errorf("failed to write pixel data to WASM memory")
+	}
+
+	// Allocate and configure decode options
+	optsPtr, err := r.guestCreateOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer r.guestFreeOptions(ctx, optsPtr)
+
+	if err := r.guestConfigureOptions(ctx, optsPtr, opts); err != nil {
+		return nil, err
+	}
+
+	// Allocate guest memory for the result count
+	countPtr, err := r.guestMalloc(ctx, 4)
+	if err != nil {
+		return nil, err
+	}
+	defer r.guestFree(ctx, countPtr)
+
+	// Call decode_barcodes_pixels(data, width, height, channels, options, max_symbols, count)
+	decodeFn := r.module.ExportedFunction("decode_barcodes_pixels")
+	if decodeFn == nil {
+		return nil, fmt.Errorf("decode_barcodes_pixels not exported in WASM module")
+	}
+
+	resultRes, err := decodeFn.Call(ctx, uint64(pixelPtr), uint64(width), uint64(height), uint64(channels), uint64(optsPtr), uint64(maxResults), uint64(countPtr))
+	if err != nil {
+		// Cancellation may close the module; mark it unusable
+		if ctx.Err() != nil {
+			r.module = nil
+		}
+		return nil, fmt.Errorf("WASM decode_barcodes_pixels call failed: %w", err)
+	}
+	resultsPtr := uint32(resultRes[0])
+
+	if resultsPtr == 0 {
+		errMsg := r.guestLastError(ctx, mem)
+		return nil, fmt.Errorf("WASM multi decode failed: %s", errMsg)
+	}
+
+	countBytes, ok := mem.Read(countPtr, 4)
+	if !ok {
+		r.guestFreeMultiResults(ctx, resultsPtr, 0)
+		return nil, fmt.Errorf("failed to read result count from WASM memory")
+	}
+	count := int(binary.LittleEndian.Uint32(countBytes))
+	defer r.guestFreeMultiResults(ctx, resultsPtr, count)
+
+	if count == 0 {
+		return []*MultiDecodeResult{}, nil
+	}
+
+	// resultsPtr points to an array of count MultiDecodeResult* pointers (wasm32: 4 bytes each)
+	ptrBytes, ok := mem.Read(resultsPtr, uint32(count)*4)
+	if !ok || len(ptrBytes) < count*4 {
+		return nil, fmt.Errorf("failed to read result pointer array from WASM memory")
+	}
+
+	results := make([]*MultiDecodeResult, 0, count)
+	for i := 0; i < count; i++ {
+		elemPtr := binary.LittleEndian.Uint32(ptrBytes[i*4:])
+		if elemPtr == 0 {
+			continue
+		}
+
+		// MultiDecodeResult struct layout (wasm32, 44 bytes):
+		// text u32 @0, format i32 @4, confidence f32 @8, points i32[8] @12
+		resultBytes, ok := mem.Read(elemPtr, 44)
+		if !ok {
+			return nil, fmt.Errorf("failed to read multi result %d from WASM memory", i)
+		}
+
+		textPtr := binary.LittleEndian.Uint32(resultBytes[0:4])
+		formatVal := int32(binary.LittleEndian.Uint32(resultBytes[4:8]))
+
+		text := ""
+		if textPtr != 0 {
+			textBytes, ok := mem.Read(textPtr, 4096)
+			if ok {
+				text = cString(textBytes)
+			}
+		}
+
+		points := make([]image.Point, 4)
+		for j := 0; j < 4; j++ {
+			points[j] = image.Point{
+				X: int(int32(binary.LittleEndian.Uint32(resultBytes[12+j*8:]))),
+				Y: int(int32(binary.LittleEndian.Uint32(resultBytes[16+j*8:]))),
+			}
+		}
+
+		results = append(results, &MultiDecodeResult{
+			Text:   text,
+			Format: formatToString(int(formatVal)),
+			Points: points,
+		})
+	}
+
+	return results, nil
+}
+
+// guestFreeMultiResults releases a decode_barcodes_pixels result array in guest memory.
+func (r *Runtime) guestFreeMultiResults(ctx context.Context, ptr uint32, count int) {
+	if fn := r.module.ExportedFunction("free_multi_results"); fn != nil {
+		fn.Call(ctx, uint64(ptr), uint64(count))
+	}
 }
 
 // validateDecodeInput checks pixel data, dimensions, and channels before entering WASM.

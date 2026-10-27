@@ -1,6 +1,8 @@
 #include "zxing.h"
 #include "zxing_internal.h"
 #include "ReadBarcode.h"
+#include <algorithm>
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -428,6 +430,129 @@ EXPORT DecodeResult* decode_barcode_pixels(const unsigned char* data, int width,
     } catch (const std::exception& e) {
         set_error("Decode error: %s", e.what());
         return nullptr;
+    }
+}
+
+// Frees a single decode_barcodes_pixels result element.
+static void free_multi_results_element(MultiDecodeResult* result);
+
+// Decodes all barcodes from tightly packed raw pixels without an intermediate encoded image.
+EXPORT MultiDecodeResult** decode_barcodes_pixels(const unsigned char* data, int width, int height,
+                                                  int channels, const DecodeOptions* options,
+                                                  int max_symbols, int* count) {
+    if (count) {
+        *count = 0;
+    }
+    if (!count || !data || width <= 0 || height <= 0) {
+        set_error("Invalid arguments or raw image data");
+        return nullptr;
+    }
+
+    auto formats = std::array{ImageFormat::None, ImageFormat::Lum, ImageFormat::LumA,
+                              ImageFormat::RGB, ImageFormat::RGBA};
+    if (channels < 1 || channels >= static_cast<int>(formats.size())) {
+        set_error("Unsupported channel count: %d", channels);
+        return nullptr;
+    }
+
+    try {
+        ImageView view(data, width, height, formats.at(channels));
+        ReaderOptions reader_opts;
+        if (options) {
+            reader_opts.setTryHarder(options->try_harder != 0);
+            reader_opts.setTryRotate(options->try_rotate != 0);
+            reader_opts.setTryInvert(options->try_invert != 0);
+            reader_opts.setTryDownscale(options->try_downscale != 0);
+
+            std::vector<ZXing::BarcodeFormat> selected_formats;
+            if (options->formats != FORMAT_ALL && options->formats != FORMAT_NONE) {
+                if (options->formats & FORMAT_QR_CODE) selected_formats.push_back(ZXing::BarcodeFormat::QRCode);
+                if (options->formats & FORMAT_AZTEC) selected_formats.push_back(ZXing::BarcodeFormat::Aztec);
+                if (options->formats & FORMAT_CODABAR) selected_formats.push_back(ZXing::BarcodeFormat::Codabar);
+                if (options->formats & FORMAT_CODE_39) selected_formats.push_back(ZXing::BarcodeFormat::Code39);
+                if (options->formats & FORMAT_CODE_93) selected_formats.push_back(ZXing::BarcodeFormat::Code93);
+                if (options->formats & FORMAT_CODE_128) selected_formats.push_back(ZXing::BarcodeFormat::Code128);
+                if (options->formats & FORMAT_DATA_MATRIX) selected_formats.push_back(ZXing::BarcodeFormat::DataMatrix);
+                if (options->formats & FORMAT_EAN_8) selected_formats.push_back(ZXing::BarcodeFormat::EAN8);
+                if (options->formats & FORMAT_EAN_13) selected_formats.push_back(ZXing::BarcodeFormat::EAN13);
+                if (options->formats & FORMAT_ITF) selected_formats.push_back(ZXing::BarcodeFormat::ITF);
+                if (options->formats & FORMAT_MAXICODE) selected_formats.push_back(ZXing::BarcodeFormat::MaxiCode);
+                if (options->formats & FORMAT_PDF_417) selected_formats.push_back(ZXing::BarcodeFormat::PDF417);
+                if (options->formats & FORMAT_UPC_A) selected_formats.push_back(ZXing::BarcodeFormat::UPCA);
+                if (options->formats & FORMAT_UPC_E) selected_formats.push_back(ZXing::BarcodeFormat::UPCE);
+                reader_opts.setFormats(ZXing::BarcodeFormats(std::move(selected_formats)));
+            }
+        }
+        if (max_symbols > 0) {
+            reader_opts.setMaxNumberOfSymbols(static_cast<uint8_t>(std::min(max_symbols, 255)));
+        }
+
+        auto barcodes = ReadBarcodes(view, reader_opts);
+
+        auto** results = new MultiDecodeResult*[barcodes.size()];
+        for (size_t i = 0; i < barcodes.size(); i++) {
+            results[i] = nullptr;
+        }
+
+        for (size_t i = 0; i < barcodes.size(); i++) {
+            auto* result = new MultiDecodeResult();
+            result->text = strdup(barcodes[i].text().c_str());
+            if (!result->text) {
+                delete result;
+                for (size_t j = 0; j < i; j++) {
+                    free_multi_results_element(results[j]);
+                }
+                delete[] results;
+                set_error("Failed to allocate result text");
+                return nullptr;
+            }
+            result->format = convert_format(barcodes[i].format());
+            result->confidence = 1.0f;
+
+            const auto& pos = barcodes[i].position();
+            result->points[0] = pos.topLeft().x;
+            result->points[1] = pos.topLeft().y;
+            result->points[2] = pos.topRight().x;
+            result->points[3] = pos.topRight().y;
+            result->points[4] = pos.bottomRight().x;
+            result->points[5] = pos.bottomRight().y;
+            result->points[6] = pos.bottomLeft().x;
+            result->points[7] = pos.bottomLeft().y;
+
+            results[i] = result;
+        }
+
+        *count = static_cast<int>(barcodes.size());
+        return results;
+    } catch (const std::exception& e) {
+        set_error("Decode error: %s", e.what());
+        return nullptr;
+    }
+}
+
+// Gets the result at the given index from a decode_barcodes_pixels result array.
+EXPORT MultiDecodeResult* multi_decode_result_get(MultiDecodeResult** results, int index) {
+    if (!results || index < 0) {
+        return nullptr;
+    }
+    return results[index];
+}
+
+// Frees a single decode_barcodes_pixels result element.
+static void free_multi_results_element(MultiDecodeResult* result) {
+    if (result) {
+        free(result->text);
+        delete result;
+    }
+}
+
+// Frees a decode_barcodes_pixels result array.
+EXPORT void free_multi_results(MultiDecodeResult** results, int count) {
+    if (results) {
+        for (int i = 0; i < count; i++) {
+            free_multi_results_element(results[i]);
+        }
+        delete[] results;
     }
 }
 

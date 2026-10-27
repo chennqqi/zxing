@@ -42,7 +42,9 @@ func NewCGO(config *Config) (ZXing, error) {
 }
 
 // NewWASM creates a WASM (wazero) backend instance.
-// Returns an error if the WASM runtime cannot be initialized.
+// The wazero backend is available on all platforms except GOOS=js GOARCH=wasm,
+// including when CGO is enabled. Returns an error if the WASM runtime cannot
+// be initialized.
 func NewWASM(config *Config) (ZXing, error) {
 	if config == nil {
 		config = DefaultConfig()

@@ -1,4 +1,4 @@
-//go:build !cgo || !(linux || windows || darwin)
+//go:build !(js && wasm)
 
 package wasm
 
@@ -326,6 +326,146 @@ func TestDecodeWithIncompatibleFormat(t *testing.T) {
 		t.Fatalf("expected decode to fail with incompatible format, got success: %s", result.Text)
 	}
 	t.Logf("Expected decode failure with incompatible format: %s", result.ErrorMessage)
+}
+
+// composeDoubleQR decodes the test QR image and returns RGBA pixel data of an
+// image containing two copies of the QR code placed side by side.
+func composeDoubleQR(t *testing.T) ([]byte, int, int) {
+	t.Helper()
+
+	file, err := os.Open("../../testdata/qrcode_test.png")
+	if err != nil {
+		t.Skipf("test image not found: %v", err)
+	}
+	defer file.Close()
+
+	img, _, err := image.Decode(file)
+	if err != nil {
+		t.Fatalf("Failed to decode test image: %v", err)
+	}
+
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+
+	// Compose two copies side by side on a white background with a gap
+	const gap = 40
+	dst := image.NewRGBA(image.Rect(0, 0, w*2+gap, h))
+	for i := range dst.Pix {
+		dst.Pix[i] = 0xFF
+	}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			c := img.At(x, y)
+			dst.Set(x, y, c)
+			dst.Set(x+w+gap, y, c)
+		}
+	}
+
+	return dst.Pix, dst.Bounds().Dx(), h
+}
+
+func TestDecodeImageMulti(t *testing.T) {
+	rt := NewRuntime()
+	if err := rt.Initialize(context.Background(), "../../wasm/zxingwrapper.wasm"); err != nil {
+		t.Fatalf("Failed to initialize wazero runtime: %v", err)
+	}
+	defer rt.Close()
+
+	pix, w, h := composeDoubleQR(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	results, err := rt.DecodeImageMulti(ctx, pix, w, h, 4, nil, 0)
+	if err != nil {
+		t.Fatalf("DecodeImageMulti failed: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 barcodes, got %d", len(results))
+	}
+	for i, r := range results {
+		if len(r.Text) == 0 {
+			t.Errorf("result %d: empty text", i)
+		}
+		if r.Format != "QR_CODE" {
+			t.Errorf("result %d: unexpected format %q", i, r.Format)
+		}
+		if len(r.Points) != 4 {
+			t.Errorf("result %d: expected 4 corner points, got %d", i, len(r.Points))
+		}
+	}
+	// The two codes are at different positions; right code must be offset in x.
+	if results[0].Points[0].X == results[1].Points[0].X {
+		t.Errorf("expected distinct positions, both at x=%d", results[0].Points[0].X)
+	}
+	t.Logf("decoded %d barcodes: %q at %v, %q at %v",
+		len(results), results[0].Text, results[0].Points, results[1].Text, results[1].Points)
+}
+
+func TestDecodeImageMultiMaxResults(t *testing.T) {
+	rt := NewRuntime()
+	if err := rt.Initialize(context.Background(), "../../wasm/zxingwrapper.wasm"); err != nil {
+		t.Fatalf("Failed to initialize wazero runtime: %v", err)
+	}
+	defer rt.Close()
+
+	pix, w, h := composeDoubleQR(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	results, err := rt.DecodeImageMulti(ctx, pix, w, h, 4, nil, 1)
+	if err != nil {
+		t.Fatalf("DecodeImageMulti failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 barcode with maxResults=1, got %d", len(results))
+	}
+}
+
+func TestDecodeImageMultiNoBarcode(t *testing.T) {
+	rt := NewRuntime()
+	if err := rt.Initialize(context.Background(), "../../wasm/zxingwrapper.wasm"); err != nil {
+		t.Fatalf("Failed to initialize wazero runtime: %v", err)
+	}
+	defer rt.Close()
+
+	// All-white image contains no barcode
+	pix := make([]byte, 100*100*4)
+	for i := range pix {
+		pix[i] = 0xFF
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	results, err := rt.DecodeImageMulti(ctx, pix, 100, 100, 4, nil, 0)
+	if err != nil {
+		t.Fatalf("DecodeImageMulti should not error on empty image, got: %v", err)
+	}
+	if results == nil {
+		t.Fatal("expected non-nil empty slice")
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestDecodeImageMultiHonorsCanceledContext(t *testing.T) {
+	rt := NewRuntime()
+	if err := rt.Initialize(context.Background(), "../../wasm/zxingwrapper.wasm"); err != nil {
+		t.Fatalf("Failed to initialize wazero runtime: %v", err)
+	}
+	defer rt.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := rt.DecodeImageMulti(ctx, make([]byte, 16), 2, 2, 4, nil, 0)
+	if err == nil {
+		t.Fatal("expected error for canceled context, got nil")
+	}
 }
 
 func TestEncodeTextReturnsError(t *testing.T) {
